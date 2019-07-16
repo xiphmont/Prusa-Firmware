@@ -4826,7 +4826,7 @@ void lcd_v2_calibration()
 	    const uint8_t filament = choose_menu_P(
             _i("Select filament:"), ////c=20 r=1
             _T(MSG_FILAMENT),_i("Cancel"));  ////c=19 r=1
-	    if (filament < 5)
+	    if (filament < mmu_extruders)
 	    {
 	        lay1cal_filament = filament;
 	    }
@@ -6242,6 +6242,12 @@ static void fil_load_menu()
     if (mmu_enabled)
     {
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '5', extr_adj, 4);
+        if(mmu_extruders>5)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '6', extr_adj, 5);
+        if(mmu_extruders>6)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', extr_adj, 6);
+        if(mmu_extruders>7)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', extr_adj, 7);
     }
     MENU_END();
 }
@@ -6257,6 +6263,12 @@ static void mmu_load_to_nozzle_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '3', lcd_mmu_load_to_nozzle, 2);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '4', lcd_mmu_load_to_nozzle, 3);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '5', lcd_mmu_load_to_nozzle, 4);
+        if(mmu_extruders>5)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '6', lcd_mmu_load_to_nozzle, 5);
+        if(mmu_extruders>6)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', lcd_mmu_load_to_nozzle, 6);
+        if(mmu_extruders>7)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', lcd_mmu_load_to_nozzle, 7);
         MENU_END();
     }
     else
@@ -6283,6 +6295,12 @@ static void mmu_fil_eject_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '3', mmu_eject_filament, 2);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '4', mmu_eject_filament, 3);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '5', mmu_eject_filament, 4);
+        if(mmu_extruders>5)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '6', mmu_eject_filament, 5);
+        if(mmu_extruders>6)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '7', mmu_eject_filament, 6);
+        if(mmu_extruders>7)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '8', mmu_eject_filament, 7);
         MENU_END();
     }
     else
@@ -6305,6 +6323,12 @@ static void mmu_cut_filament_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '3', mmu_cut_filament, 2);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '4', mmu_cut_filament, 3);
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '5', mmu_cut_filament, 4);
+        if(mmu_extruders>5)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '6', mmu_cut_filament, 5);
+        if(mmu_extruders>6)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '7', mmu_cut_filament, 6);
+        if(mmu_extruders>7)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '8', mmu_cut_filament, 7);
         MENU_END();
     }
     else
@@ -6332,9 +6356,9 @@ static void fil_unload_menu()
 	MENU_ITEM_FUNCTION_P(_i("Unload filament 3"), extr_unload_2);////MSG_UNLOAD_FILAMENT_3 c=17
 	MENU_ITEM_FUNCTION_P(_i("Unload filament 4"), extr_unload_3);////MSG_UNLOAD_FILAMENT_4 c=17
 
-	if (mmu_enabled)
+	if (mmu_enabled){
 		MENU_ITEM_FUNCTION_P(_i("Unload filament 5"), extr_unload_4);////MSG_UNLOAD_FILAMENT_5 c=17
-
+        }
 	MENU_END();
 }
 

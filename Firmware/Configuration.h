@@ -16,7 +16,7 @@ extern uint16_t nPrinterType;
 extern PGM_P sPrinterName;
 
 // Firmware version
-#define FW_VERSION "3.8.1-RC1"
+#define FW_VERSION "3.8.1-RC1-MMU+X"
 #define FW_COMMIT_NR   2851
 // FW_VERSION_UNKNOWN means this is an unofficial build.
 // The firmware should only be checked into github with this symbol.

@@ -40,6 +40,7 @@ namespace
         GetFindaInit,
         GetBuildNr,
         GetVersion,
+        GetExtruders,
         Init,
         Disabled,
         Idle,
@@ -47,7 +48,7 @@ namespace
         WaitCmd, //!< wait for command response
         Pause,
         GetDrvError, //!< get power failures count
-		SwitchMode //switch mmu between stealth and normal mode 
+        SwitchMode //switch mmu between stealth and normal mode 
     };
 }
 
@@ -72,6 +73,7 @@ uint8_t tmp_extruder = MMU_FILAMENT_UNKNOWN;
 int8_t mmu_finda = -1;
 
 int16_t mmu_version = -1;
+int16_t mmu_extruders = -1;
 
 int16_t mmu_buildnr = -1;
 
@@ -218,7 +220,7 @@ void mmu_loop(void)
 			mmu_state = S::Disabled;
 		}
 		return;
-	case S::GetVersion:
+        case S::GetVersion:
 		if (mmu_rx_ok() > 0)
 		{
 			fscanf_P(uart2io, PSTR("%u"), &mmu_version); //scan version from buffer
@@ -236,7 +238,7 @@ void mmu_loop(void)
 			bool version_valid = mmu_check_version();
 			if (!version_valid) mmu_show_warning();
 			else puts_P(PSTR("MMU version valid"));
-			
+
 			if (!activate_stealth_mode())
 			{
 				FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
@@ -256,7 +258,7 @@ void mmu_loop(void)
 		if (mmu_rx_ok() > 0)
 		{
 			FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
-		    mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
+                        mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
 			mmu_state = S::GetFindaInit;
 		}
 		return;
@@ -265,18 +267,37 @@ void mmu_loop(void)
 		{
 			fscanf_P(uart2io, PSTR("%hhu"), &mmu_finda); //scan finda from buffer
 			FDEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), mmu_finda);
-			puts_P(PSTR("MMU - ENABLED"));
-			mmu_enabled = true;
-            //-//
-            // ... PrinterType/Name
-            fSetMmuMode(true);
-			mmu_state = S::Idle;
+			FDEBUG_PUTS_P(PSTR("MMU <= 'F*'"));
+                        mmu_puts_P(PSTR("F*\n")); //send 'read # extruders' request
+			mmu_state = S::GetExtruders;
 		}
+		return;
+        case S::GetExtruders:
+		if (mmu_rx_ok() > 0)
+		{
+			fscanf_P(uart2io, PSTR("%u"), &mmu_extruders);
+			DEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), mmu_extruders);
+                        puts_P(PSTR("MMU - ENABLED"));
+                        mmu_enabled = true;
+                        //-//
+                        // ... PrinterType/Name
+                        fSetMmuMode(true);
+                        mmu_state = S::Idle;
+                }
+                else if (mmu_last_request + 1000 < _millis()) { // MMU with stock firmware timed out
+                        puts_P(PSTR("MMU - ENABLED"));
+                        mmu_enabled = true;
+                        mmu_extruders = 5;
+                        //-//
+                        // ... PrinterType/Name
+                        fSetMmuMode(true);
+                        mmu_state = S::Idle;
+                }
 		return;
 	case S::Idle:
 		if (mmu_cmd != MmuCmd::None) //command request ?
 		{
-			if ((mmu_cmd >= MmuCmd::T0) && (mmu_cmd <= MmuCmd::T4))
+			if ((mmu_cmd >= MmuCmd::T0) && (mmu_cmd <= MmuCmd::T7))
 			{
 				const uint8_t filament = mmu_cmd - MmuCmd::T0;
 				DEBUG_PRINTF_P(PSTR("MMU <= 'T%d'\n"), filament);
@@ -285,7 +306,7 @@ void mmu_loop(void)
 				mmu_fil_loaded = true;
 				mmu_idl_sens = 1;
 			}
-			else if ((mmu_cmd >= MmuCmd::L0) && (mmu_cmd <= MmuCmd::L4))
+			else if ((mmu_cmd >= MmuCmd::L0) && (mmu_cmd <= MmuCmd::L7))
 			{
 			    const uint8_t filament = mmu_cmd - MmuCmd::L0;
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'L%d'\n"), filament);
@@ -306,7 +327,7 @@ void mmu_loop(void)
 				mmu_fil_loaded = false;
 				mmu_state = S::WaitCmd;
 			}
-			else if ((mmu_cmd >= MmuCmd::E0) && (mmu_cmd <= MmuCmd::E4))
+			else if ((mmu_cmd >= MmuCmd::E0) && (mmu_cmd <= MmuCmd::E7))
 			{
 			    const uint8_t filament = mmu_cmd - MmuCmd::E0;
 				DEBUG_PRINTF_P(PSTR("MMU <= 'E%d'\n"), filament);
@@ -314,7 +335,7 @@ void mmu_loop(void)
 				mmu_fil_loaded = false;
 				mmu_state = S::WaitCmd;
 			}
-			else if ((mmu_cmd >= MmuCmd::K0) && (mmu_cmd <= MmuCmd::K4))
+			else if ((mmu_cmd >= MmuCmd::K0) && (mmu_cmd <= MmuCmd::K7))
             {
                 const uint8_t filament = mmu_cmd - MmuCmd::K0;
                 DEBUG_PRINTF_P(PSTR("MMU <= 'K%d'\n"), filament);
@@ -512,7 +533,7 @@ int8_t mmu_set_filament_type(uint8_t extruder, uint8_t filament)
 //! If T or L command is enqueued, it marks filament loaded in AutoDeplete module.
 void mmu_command(MmuCmd cmd)
 {
-	if ((cmd >= MmuCmd::T0) && (cmd <= MmuCmd::T4))
+	if ((cmd >= MmuCmd::T0) && (cmd <= MmuCmd::T7))
 	{
 		//disable extruder motor
 #ifdef TMC2130
@@ -521,7 +542,7 @@ void mmu_command(MmuCmd cmd)
 		//printf_P(PSTR("E-axis disabled\n"));
 		ad_markLoaded(cmd - MmuCmd::T0);
 	}
-    if ((cmd >= MmuCmd::L0) && (cmd <= MmuCmd::L4))
+    if ((cmd >= MmuCmd::L0) && (cmd <= MmuCmd::L7))
     {
         ad_markLoaded(cmd - MmuCmd::L0);
     }
@@ -979,7 +1000,7 @@ void extr_adj(uint8_t extruder) //loading filament for SNMM
 {
 #ifndef SNMM
     MmuCmd cmd = MmuCmd::L0 + extruder;
-    if (extruder > (MmuCmd::L4 - MmuCmd::L0))
+    if (extruder > (MmuCmd::L7 - MmuCmd::L0))
     {
         printf_P(PSTR("Filament out of range %d \n"),extruder);
         return;
