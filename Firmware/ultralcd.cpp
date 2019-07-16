@@ -2200,8 +2200,14 @@ static void lcd_support_menu()
 	MENU_ITEM_BACK_P(STR_SEPARATOR);
 	if (mmu_enabled)
 	{
-		MENU_ITEM_BACK_P(_i("MMU2 connected"));  ////c=18 r=1
-		MENU_ITEM_BACK_P(PSTR(" FW:"));  ////c=17 r=1
+                if(mmu_extruders>5){
+                     MENU_ITEM_BACK_P(_i("MMU+X connected"));
+                }
+                else
+                {
+                     MENU_ITEM_BACK_P(_i("MMU2 connected"));
+                }
+		MENU_ITEM_BACK_P(PSTR(" FW:"));
 		if (((menu_item - 1) == menu_line) && lcd_draw_update)
 		{
 		    lcd_set_cursor(6, menu_row);
@@ -2210,6 +2216,13 @@ static void lcd_support_menu()
 			else
 				lcd_puts_P(_i("unknown")); 
 		}
+                MENU_ITEM_BACK_P(_i(" extruders:"));
+		if (((menu_item - 1) == menu_line) && lcd_draw_update)
+		{
+		    lcd_set_cursor(13, menu_row);
+                    lcd_printf_P(PSTR("%d"), mmu_extruders);
+		}
+
 	}
 	else
 		MENU_ITEM_BACK_P(PSTR("MMU2       N/A"));
