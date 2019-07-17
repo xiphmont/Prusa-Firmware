@@ -44,6 +44,7 @@ namespace
         Init,
         Disabled,
         Idle,
+        GetFilament,
         GetFinda,
         WaitCmd, //!< wait for command response
         Pause,
@@ -66,6 +67,7 @@ bool ir_sensor_detected = false;
 static bool mmu_loading_flag = false; //when set to true, we assume that mmu2 unload was finished and loading phase is now performed; printer can send 'A' to mmu2 to abort loading process
 
 uint8_t mmu_extruder = MMU_FILAMENT_UNKNOWN;
+bool    mmux_features = false;
 
 //! This variable probably has no meaning and is planed to be removed
 uint8_t tmp_extruder = MMU_FILAMENT_UNKNOWN;
@@ -267,8 +269,8 @@ void mmu_loop(void)
 		{
 			fscanf_P(uart2io, PSTR("%hhu"), &mmu_finda); //scan finda from buffer
 			FDEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), mmu_finda);
-			FDEBUG_PUTS_P(PSTR("MMU <= 'F*'"));
-                        mmu_puts_P(PSTR("F*\n")); //send 'read # extruders' request
+			FDEBUG_PUTS_P(PSTR("MMU <= 'G0'"));
+                        mmu_puts_P(PSTR("G0\n")); //send 'read # extruders' request
 			mmu_state = S::GetExtruders;
 		}
 		return;
@@ -283,6 +285,7 @@ void mmu_loop(void)
                         // ... PrinterType/Name
                         fSetMmuMode(true);
                         mmu_state = S::Idle;
+                        mmux_features = true;
                 }
                 else if (mmu_last_request + 1000 < _millis()) { // MMU with stock firmware timed out
                         puts_P(PSTR("MMU - ENABLED"));
@@ -336,13 +339,13 @@ void mmu_loop(void)
 				mmu_state = S::WaitCmd;
 			}
 			else if ((mmu_cmd >= MmuCmd::K0) && (mmu_cmd <= MmuCmd::K7))
-            {
-                const uint8_t filament = mmu_cmd - MmuCmd::K0;
-                DEBUG_PRINTF_P(PSTR("MMU <= 'K%d'\n"), filament);
-                mmu_printf_P(PSTR("K%d\n"), filament); //send eject filament
-                mmu_fil_loaded = false;
-                mmu_state = S::WaitCmd;
-            }
+                        {
+                            const uint8_t filament = mmu_cmd - MmuCmd::K0;
+                            DEBUG_PRINTF_P(PSTR("MMU <= 'K%d'\n"), filament);
+                            mmu_printf_P(PSTR("K%d\n"), filament); //send eject filament
+                            mmu_fil_loaded = false;
+                            mmu_state = S::WaitCmd;
+                        }
 			else if (mmu_cmd == MmuCmd::R0)
 			{
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'R0'\n"));
@@ -369,31 +372,52 @@ void mmu_loop(void)
 				mmu_printf_P(PSTR("M%d\n"), SilentModeMenu_MMU);
 				mmu_state = S::SwitchMode;
 		}
-		else if ((mmu_last_response + 300) < _millis()) //request every 300ms
+		else if ((mmu_last_response + 300) < _millis()) //status update request every 300ms
 		{
 #ifndef IR_SENSOR
 			if(check_for_ir_sensor()) ir_sensor_detected = true;
 #endif //IR_SENSOR not defined
-			FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
-		    mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
-			mmu_state = S::GetFinda;
+                        if(mmux_features){
+                                FDEBUG_PUTS_P(PSTR("MMU <= 'G1'"));
+                                mmu_puts_P(PSTR("G1\n")); //send 'read active filament' request
+                                mmu_state = S::GetFilament;
+                        }else{
+                                FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
+                                mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
+                                mmu_state = S::GetFinda;
+                        }
+                }
+                return;
+        case S::GetFilament:
+		if (mmu_rx_ok() > 0)
+		{
+                  int tmp;
+                  fscanf_P(uart2io, PSTR("%u"), &tmp);
+                  DEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), tmp);
+                  if (tmp >= 0 && tmp < (int)mmu_extruders)
+                    mmu_extruder = tmp_extruder = tmp;
+                  else
+                    mmu_extruder = tmp_extruder = MMU_FILAMENT_UNKNOWN;
+                  FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
+                  mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
+                  mmu_state = S::GetFinda;
 		}
 		return;
 	case S::GetFinda: //response to command P0
-        if (mmu_idl_sens)
-        {
-            if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
-            {
+                if (mmu_idl_sens)
+                {
+                    if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
+                    {
 #ifdef MMU_DEBUG
-                printf_P(PSTR("MMU <= 'A'\n"));
-#endif //MMU_DEBUG  
-                mmu_puts_P(PSTR("A\n")); //send 'abort' request
-                mmu_idl_sens = 0;
-                //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
-            }
-            //else
-                //printf_P(PSTR("MMU IDLER_SENSOR = 1 - WAIT\n"));
-        }
+                      printf_P(PSTR("MMU <= 'A'\n"));
+#endif //MMU_DEBUG
+                      mmu_puts_P(PSTR("A\n")); //send 'abort' request
+                      mmu_idl_sens = 0;
+                      //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
+                    }
+                    //else
+                    //printf_P(PSTR("MMU IDLER_SENSOR = 1 - WAIT\n"));
+                }
 		if (mmu_rx_ok() > 0)
 		{
 			fscanf_P(uart2io, PSTR("%hhu"), &mmu_finda); //scan finda from buffer
@@ -422,18 +446,18 @@ void mmu_loop(void)
 		}
 		return;
 	case S::WaitCmd: //response to mmu commands
-        if (mmu_idl_sens)
-        {
-            if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
-            {
-                DEBUG_PRINTF_P(PSTR("MMU <= 'A'\n"));
-                mmu_puts_P(PSTR("A\n")); //send 'abort' request
-                mmu_idl_sens = 0;
-                //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
-            }
-            //else
-                //printf_P(PSTR("MMU IDLER_SENSOR = 1 - WAIT\n"));
-        }
+                if (mmu_idl_sens)
+                {
+                    if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
+                    {
+                      DEBUG_PRINTF_P(PSTR("MMU <= 'A'\n"));
+                      mmu_puts_P(PSTR("A\n")); //send 'abort' request
+                      mmu_idl_sens = 0;
+                      //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
+                    }
+                    //else
+                      //printf_P(PSTR("MMU IDLER_SENSOR = 1 - WAIT\n"));
+                }
 		if (mmu_rx_ok() > 0)
 		{
 		    DEBUG_PRINTF_P(PSTR("MMU => 'ok'\n"));
@@ -462,19 +486,19 @@ void mmu_loop(void)
 		}
 		return;
 	case S::Pause:
-        if (mmu_rx_ok() > 0)
-        {
-            DEBUG_PRINTF_P(PSTR("MMU => 'ok', resume print\n"));
-            mmu_attempt_nr = 0;
-            mmu_last_cmd = MmuCmd::None;
-            mmu_ready = true;
-            mmu_state = S::Idle;
-            lcd_resume_print();
-        }
-        if (mmu_cmd != MmuCmd::None)
-        {
-            mmu_state = S::Idle;
-        }
+               if (mmu_rx_ok() > 0)
+               {
+                 DEBUG_PRINTF_P(PSTR("MMU => 'ok', resume print\n"));
+                 mmu_attempt_nr = 0;
+                 mmu_last_cmd = MmuCmd::None;
+                 mmu_ready = true;
+                 mmu_state = S::Idle;
+                 lcd_resume_print();
+               }
+               if (mmu_cmd != MmuCmd::None)
+               {
+                 mmu_state = S::Idle;
+               }
 	    return;
 	case S::GetDrvError:
 		if (mmu_rx_ok() > 0)
@@ -501,7 +525,7 @@ void mmu_loop(void)
 		{ //timeout 45 s
 			mmu_state = S::Idle;
 		}
-		return;		
+		return;
 	}
 }
 
