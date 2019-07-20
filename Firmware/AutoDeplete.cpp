@@ -4,17 +4,17 @@
 
 #include "AutoDeplete.h"
 #include "assert.h"
+#include "mmu.h"
 
 //! @brief bit field marking depleted filaments
 //!
 //! binary 1 marks filament as depleted
 //! Zero initialized value means, that no filament is depleted.
-static uint8_t depleted;
-static const uint8_t filamentCount = 5;
+static uint16_t depleted;
 
 //! @return binary 1 for all filaments
 //! @par fCount number of filaments
-static constexpr uint8_t allDepleted(uint8_t fCount)
+static constexpr uint16_t allDepleted(uint8_t fCount)
 {
     return fCount == 1 ? 1 : ((1 << (fCount - 1)) | allDepleted(fCount - 1));
 }
@@ -33,6 +33,7 @@ static bool loaded(uint8_t filament)
 //! @par filament filament to be marked
 void ad_markDepleted(uint8_t filament)
 {
+    uint8_t filamentCount = mmux_features ? mmu_extruders : 5;
     assert(filament < filamentCount);
     if (filament < filamentCount)
     {
@@ -44,6 +45,7 @@ void ad_markDepleted(uint8_t filament)
 //! @par filament filament to be marked
 void ad_markLoaded(uint8_t filament)
 {
+    uint8_t filamentCount = mmux_features ? mmu_extruders : 5;
     assert(filament < filamentCount);
     if (filament < filamentCount)
     {
@@ -57,6 +59,7 @@ void ad_markLoaded(uint8_t filament)
 //! if all filaments are depleted, returns filament function parameter.
 uint8_t ad_getAlternative(uint8_t filament)
 {
+    uint8_t filamentCount = mmux_features ? mmu_extruders : 5;
     assert(filament < filamentCount);
     for (uint8_t i = 0; i<filamentCount; ++i)
     {
@@ -71,6 +74,7 @@ uint8_t ad_getAlternative(uint8_t filament)
 //! @retval false All filaments are not depleted.
 bool ad_allDepleted()
 {
+    uint8_t filamentCount = mmux_features ? mmu_extruders : 5;
     if (allDepleted(filamentCount) == depleted)
     {
         return true;
