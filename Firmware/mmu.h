@@ -19,6 +19,7 @@ extern bool ir_sensor_detected;
 extern int16_t mmu_version;
 extern int16_t mmu_buildnr;
 extern int16_t mmu_extruders;
+extern bool mmux_features;
 
 extern uint16_t mmu_power_failures;
 
@@ -43,6 +44,8 @@ enum class MmuCmd : uint_least8_t
     T5,
     T6,
     T7,
+    T8,
+    T9,
     L0,
     L1,
     L2,
@@ -51,6 +54,8 @@ enum class MmuCmd : uint_least8_t
     L5,
     L6,
     L7,
+    L8,
+    L9,
     C0,
     U0,
     E0,
@@ -61,6 +66,8 @@ enum class MmuCmd : uint_least8_t
     E5,
     E6,
     E7,
+    E8,
+    E9,
     K0,
     K1,
     K2,
@@ -69,6 +76,8 @@ enum class MmuCmd : uint_least8_t
     K5,
     K6,
     K7,
+    K8,
+    K9,
     R0,
     S3,
     W0, //!< Wait and signal load error

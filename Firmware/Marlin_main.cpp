@@ -3158,7 +3158,7 @@ void gcode_M701()
 		prusa_statistics(22);
 	}
 
-	if (mmu_enabled) 
+	if (mmu_enabled)
 	{
 		extr_adj(tmp_extruder);//loads current extruder
 		mmu_extruder = tmp_extruder;
@@ -7744,9 +7744,11 @@ Sigma_Exit:
       bool load_to_nozzle = false;
       for (index = 1; *(strchr_pointer + index) == ' ' || *(strchr_pointer + index) == '\t'; index++);
 
-	  *(strchr_pointer + index) = tolower(*(strchr_pointer + index));
-
-      if ((*(strchr_pointer + index) < '0' || *(strchr_pointer + index) > '4') && *(strchr_pointer + index) != '?' && *(strchr_pointer + index) != 'x' && *(strchr_pointer + index) != 'c') {
+      *(strchr_pointer + index) = tolower(*(strchr_pointer + index));
+      if ((*(strchr_pointer + index) < '0' || *(strchr_pointer + index) >= (mmux_features ? '0'+mmu_extruders : '5')) &&
+          *(strchr_pointer + index) != '?' &&
+          *(strchr_pointer + index) != 'x' &&
+          *(strchr_pointer + index) != 'c') {
           SERIAL_ECHOLNPGM("Invalid T code.");
       }
 	  else if (*(strchr_pointer + index) == 'x'){ //load to bondtech gears; if mmu is not present do nothing
@@ -7766,7 +7768,7 @@ Sigma_Exit:
 		}
 	  }
 	  else if (*(strchr_pointer + index) == 'c') { //load to from bondtech gears to nozzle (nozzle should be preheated)
-	  	if (mmu_enabled) 
+	  	if (mmu_enabled)
 		{
 			st_synchronize();
 			mmu_continue_loading(is_usb_printing  || (lcd_commands_type == LcdCommands::Layer1Cal));

@@ -619,8 +619,13 @@ void lcdui_print_extruder(void)
 	}
 	else
 	{
-		if (mmu_extruder == MMU_FILAMENT_UNKNOWN) chars = lcd_printf_P(_N(" ?>%u"), tmp_extruder + 1);
-		else chars = lcd_printf_P(_N(" %u>%u"), mmu_extruder + 1, tmp_extruder + 1);
+		if (mmu_extruder == MMU_FILAMENT_UNKNOWN)
+                  chars = lcd_printf_P(_N(" ?>%u"), tmp_extruder + 1);
+		else
+                  if (mmu_extruder > 8 || tmp_extruder > 8)
+                    chars = lcd_printf_P(_N("%u>%u"), mmu_extruder + 1, tmp_extruder + 1);
+                  else
+                    chars = lcd_printf_P(_N(" %u>%u"), mmu_extruder + 1, tmp_extruder + 1);
 	}
 	lcd_space(5 - chars);
 }
@@ -2200,8 +2205,8 @@ static void lcd_support_menu()
 	MENU_ITEM_BACK_P(STR_SEPARATOR);
 	if (mmu_enabled)
 	{
-                if(mmu_extruders>5){
-                     MENU_ITEM_BACK_P(_i("MMU+X connected"));
+                if(mmux_features){
+                     MENU_ITEM_BACK_P(_i("MMU2S+X connected"));
                 }
                 else
                 {
@@ -6261,6 +6266,10 @@ static void fil_load_menu()
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', extr_adj, 6);
         if(mmu_extruders>7)
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', extr_adj, 7);
+        if(mmu_extruders>8)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '9', extr_adj, 8);
+        if(mmu_extruders>9)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), ':', extr_adj, 9);
     }
     MENU_END();
 }
@@ -6282,6 +6291,10 @@ static void mmu_load_to_nozzle_menu()
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', lcd_mmu_load_to_nozzle, 6);
         if(mmu_extruders>7)
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', lcd_mmu_load_to_nozzle, 7);
+        if(mmu_extruders>8)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '9', lcd_mmu_load_to_nozzle, 8);
+        if(mmu_extruders>9)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), ':', lcd_mmu_load_to_nozzle, 9);
         MENU_END();
     }
     else
@@ -6314,6 +6327,10 @@ static void mmu_fil_eject_menu()
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '7', mmu_eject_filament, 6);
         if(mmu_extruders>7)
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '8', mmu_eject_filament, 7);
+        if(mmu_extruders>8)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '9', mmu_eject_filament, 8);
+        if(mmu_extruders>9)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), ':', mmu_eject_filament, 9);
         MENU_END();
     }
     else
@@ -6342,6 +6359,10 @@ static void mmu_cut_filament_menu()
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '7', mmu_cut_filament, 6);
         if(mmu_extruders>7)
           MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '8', mmu_cut_filament, 7);
+        if(mmu_extruders>8)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '9', mmu_cut_filament, 8);
+        if(mmu_extruders>9)
+          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), ':', mmu_cut_filament, 9);
         MENU_END();
     }
     else

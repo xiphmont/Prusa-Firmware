@@ -181,7 +181,10 @@ static char menu_selection_mark(){
 static void menu_draw_item_puts_P(char type_char, const char* str)
 {
     lcd_set_cursor(0, menu_row);
-    lcd_printf_P(PSTR("%c%-18.18S%c"), menu_selection_mark(), str, type_char);
+    if (type_char < ':')
+      lcd_printf_P(PSTR("%c%-18.18S%c"), menu_selection_mark(), str, type_char);
+    else
+      lcd_printf_P(PSTR("%c%-17.17S1%c"), menu_selection_mark(), str, type_char-':');
 }
 
 //! @brief Format sheet name
