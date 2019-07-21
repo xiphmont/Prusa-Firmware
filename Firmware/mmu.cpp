@@ -199,6 +199,8 @@ static bool activate_stealth_mode()
 #endif
 }
 
+
+
 //mmu main loop - state machine processing
 void mmu_loop(void)
 {
@@ -1271,6 +1273,16 @@ void load_all()
 	enquecommand_P(PSTR("M701 E2"));
 	enquecommand_P(PSTR("M701 E3"));
 	enquecommand_P(PSTR("M701 E4"));
+        if(mmu_extruders > 5)
+          enquecommand_P(PSTR("M701 E5"));
+        if(mmu_extruders > 6)
+          enquecommand_P(PSTR("M701 E6"));
+        if(mmu_extruders > 7)
+          enquecommand_P(PSTR("M701 E7"));
+        if(mmu_extruders > 8)
+          enquecommand_P(PSTR("M701 E8"));
+        if(mmu_extruders > 9)
+          enquecommand_P(PSTR("M701 E9"));
 #else
 	for (int i = 0; i < 4; i++)
 	{
@@ -1446,7 +1458,7 @@ void mmu_eject_filament(uint8_t filament, bool recover)
 {
 //-//
 bFilamentAction=false;                            // NOT in "mmu_fil_eject_menu()"
-	if (filament < 5) 
+	if (filament < mmu_extruders)
 	{
 
 		if (degHotend0() > EXTRUDE_MINTEMP)
