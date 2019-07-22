@@ -76,6 +76,7 @@ void menu_start(void);
 extern void menu_end(void);
 
 extern void menu_back(void);
+extern void fake_submenu_enter(void);
 extern void menu_back(uint8_t nLevel);
 
 extern void menu_back_if_clicked(void);
@@ -116,7 +117,7 @@ extern uint8_t menu_item_back_P(const char* str);
 extern uint8_t menu_item_function_P(const char* str, menu_func_t func);
 
 #define MENU_ITEM_FUNCTION_NR_P(str, number, func, fn_par) do { if (menu_item_function_P(str, number, func, fn_par)) return; } while (0)
-extern uint8_t menu_item_function_P(const char* str, char number, void (*func)(uint8_t), uint8_t fn_par);
+extern uint8_t menu_item_function_P(const char* str, uint8_t number, void (*func)(uint8_t), uint8_t fn_par);
 
 #define MENU_ITEM_GCODE_P(str, str_gcode) do { if (menu_item_gcode_P(str, str_gcode)) return; } while (0)
 extern uint8_t menu_item_gcode_P(const char* str, const char* str_gcode);
