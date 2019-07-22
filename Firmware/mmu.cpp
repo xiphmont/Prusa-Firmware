@@ -531,6 +531,9 @@ void mmu_loop(void)
 	}
 }
 
+static int cached_idler_offset = -1;
+static int cached_selector_offset = -1;
+
 void mmu_reset(void)
 {
 #ifdef MMU_HWRESET                             //HW - pulse reset pin
@@ -540,6 +543,57 @@ void mmu_reset(void)
 #else                                          //SW - send X0 command
     mmu_puts_P(PSTR("X0\n"));
 #endif
+    cached_idler_offset = -1;
+    cached_selector_offset = -1;
+}
+
+static int mmu_blocking_X_command(int cmd, int val){
+  int ret=0;
+  int lcd_was_enabled = lcd_update_enabled;
+  lcd_update_enabled = false;
+  if(val>=0){
+    printf_P(PSTR("MMU <= 'X%d %d'\n"), cmd, val);
+    mmu_printf_P(PSTR("X%d %d\n"), cmd, val);
+  } else {
+    printf_P(PSTR("MMU <= 'X%d'\n"), cmd);
+    mmu_printf_P(PSTR("X%d\n"), cmd);
+  }
+  mmu_state = S::WaitCmd;
+
+  while (mmu_rx_ok() <= 0)
+    delay_keep_alive(100);
+  fscanf_P(uart2io, PSTR("%u"), &ret); // return status
+  printf_P(PSTR("MMU => '%dok'\n"),ret);
+  lcd_update_enabled = lcd_was_enabled;
+  return ret;
+}
+
+int mmu_calibrate()
+{
+  cached_idler_offset = -1;
+  cached_selector_offset = -1;
+  return mmu_blocking_X_command(1,-1);
+}
+
+int mmu_home()
+{
+  cached_idler_offset = -1;
+  cached_selector_offset = -1;
+  return mmu_blocking_X_command(2,-1);
+}
+
+int mmu_get_idler_offset()
+{
+  if(cached_idler_offset == -1)
+    cached_idler_offset = mmu_blocking_X_command(3,-1);
+  return cached_idler_offset;
+}
+
+int mmu_get_selector_offset()
+{
+  if(cached_selector_offset == -1)
+    cached_selector_offset = mmu_blocking_X_command(4,-1);
+  return cached_selector_offset;
 }
 
 int8_t mmu_set_filament_type(uint8_t extruder, uint8_t filament)
@@ -705,6 +759,8 @@ void mmu_wait_for_heater_blocking()
         lcd_wait_for_heater();
     }
 }
+
+
 
 void manage_response(bool move_axes, bool turn_off_nozzle, uint8_t move)
 {

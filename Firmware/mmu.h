@@ -107,6 +107,10 @@ extern void mmu_loop(void);
 
 
 extern void mmu_reset(void);
+extern int mmu_calibrate(void);
+extern int mmu_home(void);
+extern int mmu_get_idler_offset(void);
+extern int mmu_get_selector_offset(void);
 
 extern int8_t mmu_set_filament_type(uint8_t extruder, uint8_t filament);
 

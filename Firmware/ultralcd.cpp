@@ -4670,6 +4670,85 @@ void lcd_pinda_calibration_menu()
 	MENU_END();
 }
 
+void lcd_calibrate_mmu()
+{
+        //XXXXX check for filament!
+
+        fake_submenu_enter();
+        lcd_display_message_fullscreen_P(_i("MMU calibration in progress..."));
+	KEEPALIVE_STATE(IN_HANDLER);
+        int ret = mmu_calibrate();
+        switch (ret) {
+        case 0: // return status 0: success
+          lcd_display_message_fullscreen_P(_i("MMU calibration complete."));
+
+          delay_keep_alive(3000);
+          break;
+        default: // otherwise error
+          lcd_show_fullscreen_message_and_wait_P(_i("MMU calibration failed; previous settings retained.  "
+                                                    "Press the knob to reset MMU and continue."));
+          mmu_reset();
+          break;
+        }
+        lcd_update_enable(true);
+        lcd_quick_feedback();
+}
+
+void lcd_home_mmu()
+{
+
+        //XXXXX check for filament!
+
+        fake_submenu_enter();
+        lcd_display_message_fullscreen_P(_i("Re-homing the MMU.  Please wait..."));
+        int ret = mmu_home();
+        switch (ret) {
+        case 0: // return status 0: success
+          lcd_display_message_fullscreen_P(_i("MMU homing complete."));
+          delay_keep_alive(3000);
+          break;
+        default: // otherwise error
+          lcd_show_fullscreen_message_and_wait_P(_i("MMU homing failed.  "
+                                                    "Press the knob to reset MMU and continue."));
+          mmu_reset();
+          break;
+        }
+        lcd_update_enable(true);
+        lcd_quick_feedback();
+}
+
+void lcd_reset_mmu()
+{
+        fake_submenu_enter();
+        lcd_display_message_fullscreen_P(_i("Resetting the MMU.  Please wait..."));
+        mmu_reset();
+        delay_keep_alive(2000);
+        lcd_update_enable(true);
+        lcd_quick_feedback();
+}
+
+void lcd_mmux_calibration_menu()
+{
+  int idl_offset = mmu_get_idler_offset();
+  int sel_offset = mmu_get_selector_offset();
+
+	MENU_BEGIN();
+		MENU_ITEM_BACK_P(_T(MSG_MENU_CALIBRATION));
+		MENU_ITEM_SUBMENU_P(_i("Calibrate MMU"), lcd_calibrate_mmu);
+		MENU_ITEM_SUBMENU_P(_i("Home MMU"), lcd_home_mmu);
+                MENU_ITEM_EDIT_int3_P(_i("Selector offset"),  &sel_offset, 0, 255);
+                MENU_ITEM_EDIT_int3_P(_i("Idler offset"),  &idl_offset, 0, 255);
+		MENU_ITEM_SUBMENU_P(_i("Reset MMU"), lcd_reset_mmu);
+	MENU_END();
+
+        if(idl_offset != mmu_get_idler_offset()){
+          // idler offset changed, update MMU realtime
+        }
+        if(sel_offset != mmu_get_selector_offset()){
+          // selector offset changed, update MMU realtime
+        }
+}
+
 void lcd_temp_calibration_set() {
 	temp_cal_active = !temp_cal_active;
 	eeprom_update_byte((unsigned char *)EEPROM_TEMP_CAL_ACTIVE, temp_cal_active);
@@ -5867,6 +5946,9 @@ static void lcd_calibration_menu()
 #ifndef MK1BP
 	MENU_ITEM_SUBMENU_P(_i("Temp. calibration"), lcd_pinda_calibration_menu);////MSG_CALIBRATION_PINDA_MENU c=17 r=1
 #endif //MK1BP
+        if(mmux_features){
+          MENU_ITEM_SUBMENU_P(_i("MMU calibration"), lcd_mmux_calibration_menu);
+        }
   }
   
   MENU_END();
@@ -6042,8 +6124,8 @@ static char snmm_stop_print_menu() { //menu for choosing which filaments will be
 //!
 //! Create list of items with header. Header can not be selected.
 //! Each item has text description passed by function parameter and
-//! number. There are 5 numbered items, if mmu_enabled, 4 otherwise.
-//! Items are numbered from 1 to 4 or 5. But index returned starts at 0.
+//! number. There are up to 10 numbered items if mmu_enabled, 4 otherwise.
+//! Items are numbered from 1 to n, but index returned starts at 0.
 //! There can be last item with different text and no number.
 //!
 //! @param header Header text
@@ -6252,24 +6334,14 @@ static void fil_load_menu()
     MENU_BEGIN();
     MENU_ITEM_BACK_P(_T(MSG_MAIN));
     MENU_ITEM_FUNCTION_P(_i("Load all"), load_all); ////MSG_LOAD_ALL c=17
-    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '1', extr_adj, 0); ////MSG_LOAD_FILAMENT_1 c=16
-    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '2', extr_adj, 1); ////MSG_LOAD_FILAMENT_2 c=17
-    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '3', extr_adj, 2); ////MSG_LOAD_FILAMENT_3 c=17
-    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '4', extr_adj, 3); ////MSG_LOAD_FILAMENT_4 c=17
-
+    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 1, extr_adj, 0); ////MSG_LOAD_FILAMENT_1 c=16
+    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 2, extr_adj, 1); ////MSG_LOAD_FILAMENT_2 c=17
+    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 3, extr_adj, 2); ////MSG_LOAD_FILAMENT_3 c=17
+    MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 4, extr_adj, 3); ////MSG_LOAD_FILAMENT_4 c=17
     if (mmu_enabled)
     {
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '5', extr_adj, 4);
-        if(mmu_extruders>5)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '6', extr_adj, 5);
-        if(mmu_extruders>6)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', extr_adj, 6);
-        if(mmu_extruders>7)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', extr_adj, 7);
-        if(mmu_extruders>8)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '9', extr_adj, 8);
-        if(mmu_extruders>9)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), ':', extr_adj, 9);
+        for (int i=5; i < mmu_extruders; i++)
+            MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i, extr_adj, i-1);
     }
     MENU_END();
 }
@@ -6280,21 +6352,15 @@ static void mmu_load_to_nozzle_menu()
     {
         MENU_BEGIN();
         MENU_ITEM_BACK_P(_T(MSG_MAIN));
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '1', lcd_mmu_load_to_nozzle, 0);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '2', lcd_mmu_load_to_nozzle, 1);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '3', lcd_mmu_load_to_nozzle, 2);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '4', lcd_mmu_load_to_nozzle, 3);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '5', lcd_mmu_load_to_nozzle, 4);
-        if(mmu_extruders>5)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '6', lcd_mmu_load_to_nozzle, 5);
-        if(mmu_extruders>6)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '7', lcd_mmu_load_to_nozzle, 6);
-        if(mmu_extruders>7)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '8', lcd_mmu_load_to_nozzle, 7);
-        if(mmu_extruders>8)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), '9', lcd_mmu_load_to_nozzle, 8);
-        if(mmu_extruders>9)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), ':', lcd_mmu_load_to_nozzle, 9);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 1, lcd_mmu_load_to_nozzle, 0);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 2, lcd_mmu_load_to_nozzle, 1);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 3, lcd_mmu_load_to_nozzle, 2);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 4, lcd_mmu_load_to_nozzle, 3);
+        if (mmu_enabled)
+        {
+             for (int i=5; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i, lcd_mmu_load_to_nozzle, i-1);
+        }
         MENU_END();
     }
     else
@@ -6316,21 +6382,15 @@ static void mmu_fil_eject_menu()
     {
         MENU_BEGIN();
         MENU_ITEM_BACK_P(_T(MSG_MAIN));
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '1', mmu_eject_filament, 0);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '2', mmu_eject_filament, 1);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '3', mmu_eject_filament, 2);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '4', mmu_eject_filament, 3);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '5', mmu_eject_filament, 4);
-        if(mmu_extruders>5)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '6', mmu_eject_filament, 5);
-        if(mmu_extruders>6)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '7', mmu_eject_filament, 6);
-        if(mmu_extruders>7)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '8', mmu_eject_filament, 7);
-        if(mmu_extruders>8)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), '9', mmu_eject_filament, 8);
-        if(mmu_extruders>9)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), ':', mmu_eject_filament, 9);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), 1, mmu_eject_filament, 0);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), 2, mmu_eject_filament, 1);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), 3, mmu_eject_filament, 2);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), 4, mmu_eject_filament, 3);
+        if (mmu_enabled)
+        {
+             for (int i=5; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i, mmu_eject_filament, i-1);
+        }
         MENU_END();
     }
     else
@@ -6348,21 +6408,16 @@ static void mmu_cut_filament_menu()
     {
         MENU_BEGIN();
         MENU_ITEM_BACK_P(_T(MSG_MAIN));
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '1', mmu_cut_filament, 0);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '2', mmu_cut_filament, 1);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '3', mmu_cut_filament, 2);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '4', mmu_cut_filament, 3);
-        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '5', mmu_cut_filament, 4);
-        if(mmu_extruders>5)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '6', mmu_cut_filament, 5);
-        if(mmu_extruders>6)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '7', mmu_cut_filament, 6);
-        if(mmu_extruders>7)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '8', mmu_cut_filament, 7);
-        if(mmu_extruders>8)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), '9', mmu_cut_filament, 8);
-        if(mmu_extruders>9)
-          MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), ':', mmu_cut_filament, 9);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 1, mmu_cut_filament, 0);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 2, mmu_cut_filament, 1);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 3, mmu_cut_filament, 2);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 4, mmu_cut_filament, 3);
+        MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 5, mmu_cut_filament, 4);
+        if (mmu_enabled)
+        {
+             for (int i=5; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i, mmu_eject_filament, i-1);
+        }
         MENU_END();
     }
     else
