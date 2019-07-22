@@ -97,6 +97,14 @@ void menu_back(uint8_t nLevel)
      menu_goto(menu_stack[menu_depth].menu, menu_stack[menu_depth].position, true, true);
 }
 
+void fake_submenu_enter()
+{
+     menu_depth = ((menu_depth >= 1) ? (menu_depth - 1) : 0);
+     lcd_consume_click();
+     menu_goto(menu_stack[menu_depth].menu, menu_stack[menu_depth].position, false, false);
+     menu_clicked = false;
+}
+
 void menu_back(void)
 {
 menu_back(1);
@@ -181,10 +189,7 @@ static char menu_selection_mark(){
 static void menu_draw_item_puts_P(char type_char, const char* str)
 {
     lcd_set_cursor(0, menu_row);
-    if (type_char < ':')
-      lcd_printf_P(PSTR("%c%-18.18S%c"), menu_selection_mark(), str, type_char);
-    else
-      lcd_printf_P(PSTR("%c%-17.17S1%c"), menu_selection_mark(), str, type_char-':');
+    lcd_printf_P(PSTR("%c%-18.18S%c"), menu_selection_mark(), str, type_char);
 }
 
 //! @brief Format sheet name
@@ -232,11 +237,19 @@ static void menu_draw_item_puts_E(char type_char, const Sheet &sheet)
     lcd_printf_P(PSTR("%c%-18.18s%c"), menu_selection_mark(), buffer.c, type_char);
 }
 
-static void menu_draw_item_puts_P(char type_char, const char* str, char num)
+static void menu_draw_item_puts_P(char type_char, const char* str, uint8_t num)
 {
     lcd_set_cursor(0, menu_row);
-    lcd_printf_P(PSTR("%c%-.16S "), menu_selection_mark(), str);
-    lcd_putc(num);
+    if(num>9){
+      lcd_printf_P(PSTR("%c%-.15S "), menu_selection_mark(), str);
+      lcd_putc('0'+num/10);
+      lcd_putc(num);
+      lcd_putc('0'+num%10);
+      lcd_putc(num);
+    }else{
+      lcd_printf_P(PSTR("%c%-.16S "), menu_selection_mark(), str);
+      lcd_putc('0'+num);
+    }
     lcd_set_cursor(19, menu_row);
     lcd_putc(type_char);
 }
@@ -359,7 +372,7 @@ uint8_t menu_item_function_P(const char* str, menu_func_t func)
 //! @param fn_par value to be passed to function
 //! @retval 0
 //! @retval 1 Item was clicked
-uint8_t menu_item_function_P(const char* str, char number, void (*func)(uint8_t), uint8_t fn_par)
+uint8_t menu_item_function_P(const char* str, uint8_t number, void (*func)(uint8_t), uint8_t fn_par)
 {
     if (menu_item == menu_line)
     {
