@@ -413,15 +413,15 @@ void mmu_loop(void)
                         if (mmu_fil_extruder_unloaded && (PIN_GET(IR_SENSOR_PIN) == 0)) mmu_fil_extruder_sensor_spurious_loaded = true;
                         if (mmu_fil_extruder_sensor_spurious_empty){
                           if (mmu_fil_extruder_sensor_spurious_loaded){
-                             lcd_setstatuspgm(_i("IR sens malfunction"));
+                             lcd_setstatuspgm(PSTR("IR sensor malfunctioning; spurious readings"));
                              custom_message_type = CustomMsg::CheckEngine;
                           }else{
-                            lcd_setstatuspgm(_i("IR sensor ON marginal"));
+                            lcd_setstatuspgm(PSTR("IR sensor ON signal unstable; check calibration."));
                             custom_message_type = CustomMsg::CheckEngine;
                           }
                         } else {
                           if (mmu_fil_extruder_sensor_spurious_loaded){
-                            lcd_setstatuspgm(_i("IR sensor OFF marginal"));
+                            lcd_setstatuspgm(PSTR("IR sensor OFF signal unstable; check calibration."));
                             custom_message_type = CustomMsg::CheckEngine;
                           }
                         }
@@ -481,7 +481,7 @@ void mmu_loop(void)
 				{
 				    enquecommand_front_P(PSTR("M600")); //save print and run M600 command
 				}
-			} 
+			}
 			mmu_state = S::Idle;
 			if (mmu_cmd == MmuCmd::None)
 				mmu_ready = true;
@@ -1257,7 +1257,6 @@ void extr_unload()
 		mmu_command(MmuCmd::U0);
 		// get response
 		manage_response(false, true, MMU_UNLOAD_MOVE);
-                mmu_fil_extruder_unloaded = true;
         menu_back();
 #else //SNMM
 
@@ -1310,6 +1309,7 @@ void extr_unload()
 		lcd_update_enable(true);
 		lcd_return_to_status();
 		max_feedrate[E_AXIS] = 50;
+                mmu_fil_extruder_unloaded = true;
 #endif //SNMM
 	}
 	else
