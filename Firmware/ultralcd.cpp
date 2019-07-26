@@ -1576,24 +1576,25 @@ void lcd_commands()
 
 void lcd_return_to_status()
 {
-	lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
-	menu_goto(lcd_status_screen, 0, false, true);
-	menu_depth = 0;
-    eFilamentAction = FilamentAction::None; // i.e. non-autoLoad
+  lcd_status_update_delay=0;
+  lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
+  menu_goto(lcd_status_screen, 0, false, true);
+  menu_depth = 0;
+  eFilamentAction=FilamentAction::None; // i.e. non-autoLoad
 }
 
 //! @brief Pause print, disable nozzle heater, move to park position
 void lcd_pause_print()
 {
-    lcd_return_to_status();
-    stop_and_save_print_to_ram(0.0,0.0);
-    setAllTargetHotends(0);
-    isPrintPaused = true;
-    if (LcdCommands::Idle == lcd_commands_type)
+  lcd_return_to_status();
+  stop_and_save_print_to_ram(0.0,0.0);
+  setAllTargetHotends(0);
+  isPrintPaused = true;
+  if (LcdCommands::Idle == lcd_commands_type)
     {
-        lcd_commands_type = LcdCommands::LongPause;
+      lcd_commands_type = LcdCommands::LongPause;
     }
-	SERIAL_PROTOCOLLNRPGM(MSG_OCTOPRINT_PAUSED); //pause for octoprint
+  SERIAL_PROTOCOLLNRPGM(MSG_OCTOPRINT_PAUSED); //pause for octoprint
 }
 
 
