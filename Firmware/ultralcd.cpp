@@ -370,7 +370,7 @@ static void lcd_implementation_drawmenu_sdfile_selected(uint8_t row, char* longF
       scroll_message(lcd_status_message, 1, row);
       if (lcd_timeoutToStatus.expired(LCD_TIMEOUT_TO_STATUS) ||
           LCD_CLICKED ||
-          lcd_encoder_steps()){
+          lcd_encoder_steps){
         scrollstuff = 0;
         pad_message(lcd_status_message, 1, row);
         lcd_setstatuspgm(_T(WELCOME_MSG)); // as close as we have to 'clear the status line'
@@ -2658,7 +2658,6 @@ void lcd_loading_filament() {
 
 
 void lcd_alright() {
-  int enc_dif = 0;
   int cursor_pos = 1;
 
 
@@ -2688,48 +2687,37 @@ void lcd_alright() {
   lcd_print(">");
 
 
-  enc_dif = lcd_encoder_diff;
   lcd_consume_click();
   while (lcd_change_fil_state == 0) {
 
     manage_heater();
     manage_inactivity(true);
 
-    if ( abs((enc_dif - lcd_encoder_diff)) > 4 ) {
+    if ( lcd_encoder_steps ) {
 
-      if ( (abs(enc_dif - lcd_encoder_diff)) > 1 ) {
-        if (enc_dif > lcd_encoder_diff ) {
-          cursor_pos --;
-        }
+      cursor_pos += lcd_encoder_steps;
 
-        if (enc_dif < lcd_encoder_diff  ) {
-          cursor_pos ++;
-        }
-
-        if (cursor_pos > 3) {
-          cursor_pos = 3;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-        }
-
-        if (cursor_pos < 1) {
-          cursor_pos = 1;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-        }
-        lcd_set_cursor(0, 1);
-        lcd_print(" ");
-        lcd_set_cursor(0, 2);
-        lcd_print(" ");
-        lcd_set_cursor(0, 3);
-        lcd_print(" ");
-        lcd_set_cursor(0, cursor_pos);
-        lcd_print(">");
-        enc_dif = lcd_encoder_diff;
-				Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-        _delay(100);
+      if (cursor_pos > 3) {
+        cursor_pos = 3;
+        Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
       }
 
+      if (cursor_pos < 1) {
+        cursor_pos = 1;
+        Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+      }
+      lcd_set_cursor(0, 1);
+      lcd_print(" ");
+      lcd_set_cursor(0, 2);
+      lcd_print(" ");
+      lcd_set_cursor(0, 3);
+      lcd_print(" ");
+      lcd_set_cursor(0, cursor_pos);
+      lcd_print(">");
+      lcd_encoder_steps = 0;
+      Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+      _delay(100);
     }
-
 
     if (lcd_clicked()) {
 			Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
@@ -2737,9 +2725,6 @@ void lcd_alright() {
       _delay(500);
 
     }
-
-
-
   };
 
 
@@ -3281,7 +3266,6 @@ void pid_extruder()
 }
 /*
 void lcd_adjust_z() {
-  int enc_dif = 0;
   int cursor_pos = 1;
   int fsm = 0;
 
@@ -3302,42 +3286,30 @@ void lcd_adjust_z() {
 
   lcd_print(">");
 
-
-  enc_dif = lcd_encoder_diff;
-
   while (fsm == 0) {
 
     manage_heater();
     manage_inactivity(true);
 
-    if ( abs((enc_dif - lcd_encoder_diff)) > 4 ) {
+    if ( lcd_encoder_steps ) {
 
-      if ( (abs(enc_dif - lcd_encoder_diff)) > 1 ) {
-        if (enc_dif > lcd_encoder_diff ) {
-          cursor_pos --;
-        }
+      cursor_pos += lcd_encoder_steps;
 
-        if (enc_dif < lcd_encoder_diff  ) {
-          cursor_pos ++;
-        }
-
-        if (cursor_pos > 2) {
-          cursor_pos = 2;
-        }
-
-        if (cursor_pos < 1) {
-          cursor_pos = 1;
-        }
-        lcd_set_cursor(0, 1);
-        lcd_print(" ");
-        lcd_set_cursor(0, 2);
-        lcd_print(" ");
-        lcd_set_cursor(0, cursor_pos);
-        lcd_print(">");
-        enc_dif = lcd_encoder_diff;
-        _delay(100);
+      if (cursor_pos > 2) {
+        cursor_pos = 2;
       }
 
+      if (cursor_pos < 1) {
+        cursor_pos = 1;
+      }
+      lcd_set_cursor(0, 1);
+      lcd_print(" ");
+      lcd_set_cursor(0, 2);
+      lcd_print(" ");
+      lcd_set_cursor(0, cursor_pos);
+      lcd_print(">");
+      lcd_encoder_steps = 0;
+      _delay(100);
     }
 
 
@@ -3450,15 +3422,15 @@ bool lcd_calibrate_z_end_stop_manual(bool only_z)
         const bool    multi_screen        = msg_next != NULL;
         unsigned long previous_millis_msg = _millis();
         // Until the user finishes the z up movement.
-        lcd_encoder_diff = 0;
+        lcd_encoder_steps = 0;
         lcd_encoder = 0;
         for (;;) {
             manage_heater();
             manage_inactivity(true);
-            if (lcd_encoder_steps()){
+            if (lcd_encoder_steps){
                 _delay(50);
-                lcd_encoder += abs(lcd_encoder_steps());
-                lcd_encoder_diff = 0;
+                lcd_encoder += abs(lcd_encoder_steps);
+                lcd_encoder_steps = 0;
                 if (! planner_queue_full()) {
                     // Only move up, whatever direction the user rotates the encoder.
                     current_position[Z_AXIS] += fabs(lcd_encoder);
@@ -3702,7 +3674,6 @@ int8_t lcd_show_multiscreen_message_two_choices_and_wait_P(const char *msg, bool
 
 	// Wait for user confirmation or a timeout.
 	unsigned long previous_millis_cmd = _millis();
-	int8_t        enc_dif = lcd_encoder_diff;
 	lcd_consume_click();
 	//KEEPALIVE_STATE(PAUSED_FOR_USER);
 	for (;;) {
@@ -3713,24 +3684,24 @@ int8_t lcd_show_multiscreen_message_two_choices_and_wait_P(const char *msg, bool
 			manage_heater();
 			manage_inactivity(true);
 
-			if (abs(enc_dif - lcd_encoder_diff) > 4) {
+			if (lcd_encoder_steps) {
 				if (msg_next == NULL) {
 					lcd_set_cursor(0, 3);
-					if (enc_dif < lcd_encoder_diff && yes) {
+					if (lcd_encoder_steps>0 && yes) {
 						lcd_puts_P((PSTR(" ")));
 						lcd_set_cursor(7, 3);
 						lcd_puts_P((PSTR(">")));
 						yes = false;
 						Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
 					}
-					else if (enc_dif > lcd_encoder_diff && !yes) {
+					else if (lcd_encoder_steps<0 && !yes) {
 						lcd_puts_P((PSTR(">")));
 						lcd_set_cursor(7, 3);
 						lcd_puts_P((PSTR(" ")));
 						yes = true;
 						Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
 					}
-					enc_dif = lcd_encoder_diff;
+					lcd_encoder_steps = 0;
 				}
 				else {
 					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
@@ -3796,7 +3767,6 @@ int8_t lcd_show_fullscreen_message_yes_no_and_wait_P(const char *msg, bool allow
 
 	// Wait for user confirmation or a timeout.
 	unsigned long previous_millis_cmd = _millis();
-	int8_t        enc_dif = lcd_encoder_diff;
 	lcd_consume_click();
 	KEEPALIVE_STATE(PAUSED_FOR_USER);
 	for (;;) {
@@ -3807,9 +3777,9 @@ int8_t lcd_show_fullscreen_message_yes_no_and_wait_P(const char *msg, bool allow
 		}
 		manage_heater();
 		manage_inactivity(true);
-		if (abs(enc_dif - lcd_encoder_diff) > 4) {
+		if (lcd_encoder_steps) {
 			lcd_set_cursor(0, 2);
-				if (enc_dif < lcd_encoder_diff && retval) {
+				if (lcd_encoder_steps > 0 && retval) {
 					lcd_puts_P((PSTR(" ")));
 					lcd_set_cursor(0, 3);
 					lcd_puts_P((PSTR(">")));
@@ -3817,14 +3787,14 @@ int8_t lcd_show_fullscreen_message_yes_no_and_wait_P(const char *msg, bool allow
 					Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
 
 				}
-				else if (enc_dif > lcd_encoder_diff && !retval) {
+				else if (lcd_encoder_steps < 0 && !retval) {
 					lcd_puts_P((PSTR(">")));
 					lcd_set_cursor(0, 3);
 					lcd_puts_P((PSTR(" ")));
 					retval = 1;
 					Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
 				}
-				enc_dif = lcd_encoder_diff;
+				lcd_encoder_steps=0;
 		}
 		if (lcd_clicked()) {
 			Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
@@ -3832,7 +3802,6 @@ int8_t lcd_show_fullscreen_message_yes_no_and_wait_P(const char *msg, bool allow
 			break;
 		}
 	}
-    lcd_encoder_diff = 0;
     return retval;
 }
 
@@ -4231,7 +4200,6 @@ static void prusa_stat_printinfo()
 
 /*
 void lcd_pick_babystep(){
-    int enc_dif = 0;
     int cursor_pos = 1;
     int fsm = 0;
     
@@ -4266,55 +4234,40 @@ void lcd_pick_babystep(){
     lcd_print(">");
     
     
-    enc_dif = lcd_encoder_diff;
-    
     while (fsm == 0) {
         
         manage_heater();
         manage_inactivity(true);
         
-        if ( abs((enc_dif - lcd_encoder_diff)) > 4 ) {
-            
-            if ( (abs(enc_dif - lcd_encoder_diff)) > 1 ) {
-                if (enc_dif > lcd_encoder_diff ) {
-                    cursor_pos --;
-                }
-                
-                if (enc_dif < lcd_encoder_diff  ) {
-                    cursor_pos ++;
-                }
-                
-                if (cursor_pos > 4) {
-                    cursor_pos = 4;
-                }
-                
-                if (cursor_pos < 1) {
-                    cursor_pos = 1;
-                }
+        if ( lcd_encoder_steps ) {
+            cursor_pos += lcd_encoder_steps;
+            lcd_encoder-steps = 0;
 
-                
-                lcd_set_cursor(1, 2);
-                lcd_print(" ");
-                lcd_set_cursor(1, 3);
-                lcd_print(" ");
-                lcd_set_cursor(10, 2);
-                lcd_print(" ");
-                lcd_set_cursor(10, 3);
-                lcd_print(" ");
-                
-                if (cursor_pos < 3) {
-                    lcd_set_cursor(1, cursor_pos+1);
-                    lcd_print(">");
-                }else{
-                    lcd_set_cursor(10, cursor_pos-1);
-                    lcd_print(">");
-                }
-                
-   
-                enc_dif = lcd_encoder_diff;
-                _delay(100);
+            if (cursor_pos > 4) {
+                cursor_pos = 4;
             }
-            
+
+            if (cursor_pos < 1) {
+                cursor_pos = 1;
+            }
+
+            lcd_set_cursor(1, 2);
+            lcd_print(" ");
+            lcd_set_cursor(1, 3);
+            lcd_print(" ");
+            lcd_set_cursor(10, 2);
+            lcd_print(" ");
+            lcd_set_cursor(10, 3);
+            lcd_print(" ");
+
+            if (cursor_pos < 3) {
+                lcd_set_cursor(1, cursor_pos+1);
+                lcd_print(">");
+            }else{
+                lcd_set_cursor(10, cursor_pos-1);
+                lcd_print(">");
+            }
+            _delay(100);
         }
         
         if (lcd_clicked()) {
@@ -4490,7 +4443,7 @@ static void lcd_silent_mode_set() {
 #ifdef TMC2130
   if (lcd_crash_detect_enabled() && (SilentModeMenu != SILENT_MODE_NORMAL))
 	  menu_submenu(lcd_crash_mode_info2);
-  lcd_encoder_diff=0;                             // reset 'encoder buffer'
+  lcd_encoder_steps=0;                             // reset 'encoder buffer'
 #endif //TMC2130
 }
 
@@ -4760,7 +4713,7 @@ void lcd_calibrate_pinda() {
 				delay_keep_alive(50);
 				//previous_millis_cmd = _millis();
 				lcd_encoder += lcd_encoder_steps();
-				lcd_encoder_diff = 0;
+				lcd_encoder_steps = 0;
 				if (!planner_queue_full()) {
 					current_position[E_AXIS] += float(abs((int)lcd_encoder)) * 0.01; //0.05
 					lcd_encoder = 0;
@@ -5901,7 +5854,6 @@ static void lcd_calibration_menu()
 }
 
 void bowden_menu() {
-	int enc_dif = lcd_encoder_diff;
 	int cursor_pos = 0;
 	lcd_clear();
 	lcd_set_cursor(0, 0);
@@ -5915,46 +5867,38 @@ void bowden_menu() {
 		lcd_print(bowden_length[i] - 48);
 
 	}
-	enc_dif = lcd_encoder_diff;
 	lcd_consume_click();
 	while (1) {
 
 		manage_heater();
 		manage_inactivity(true);
 
-		if (abs((enc_dif - lcd_encoder_diff)) > 2) {
+		if (lcd_encoder_steps) {
+                  cursor_pos += lcd_encoder_steps;
+                  lcd_encoder_steps = 0;
 
-			if (enc_dif > lcd_encoder_diff) {
-					cursor_pos--;
-				}
+                  if (cursor_pos > 3) {
+                    cursor_pos = 3;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                  }
 
-				if (enc_dif < lcd_encoder_diff) {
-					cursor_pos++;
-				}
+                  if (cursor_pos < 0) {
+                    cursor_pos = 0;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                  }
 
-				if (cursor_pos > 3) {
-					cursor_pos = 3;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-				}
-
-				if (cursor_pos < 0) {
-					cursor_pos = 0;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-				}
-
-				lcd_set_cursor(0, 0);
-				lcd_print(" ");
-				lcd_set_cursor(0, 1);
-				lcd_print(" ");
-				lcd_set_cursor(0, 2);
-				lcd_print(" ");
-				lcd_set_cursor(0, 3);
-				lcd_print(" ");
-				lcd_set_cursor(0, cursor_pos);
-				lcd_print(">");
-				Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-				enc_dif = lcd_encoder_diff;
-				_delay(100);
+                  lcd_set_cursor(0, 0);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 1);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 2);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 3);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, cursor_pos);
+                  lcd_print(">");
+                  Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+                  _delay(100);
 		}
 
 		if (lcd_clicked()) {
@@ -5972,20 +5916,20 @@ void bowden_menu() {
 				lcd_set_cursor(13, 1);
 				lcd_print(bowden_length[cursor_pos] - 48);
 
-				if (abs((enc_dif - lcd_encoder_diff)) > 2) {
-						if (enc_dif > lcd_encoder_diff) {
-							bowden_length[cursor_pos]--;
-							lcd_set_cursor(13, 1);
-							lcd_print(bowden_length[cursor_pos] - 48);
-							enc_dif = lcd_encoder_diff;
-						}
+				if (lcd_encoder_steps) {
+                                  if (lcd_encoder_steps > 0) {
+                                    bowden_length[cursor_pos]--;
+                                    lcd_set_cursor(13, 1);
+                                    lcd_print(bowden_length[cursor_pos] - 48);
+                                    lcd_encoder_steps = 0;
+                                  }
 
-						if (enc_dif < lcd_encoder_diff) {
-							bowden_length[cursor_pos]++;
-							lcd_set_cursor(13, 1);
-							lcd_print(bowden_length[cursor_pos] - 48);
-							enc_dif = lcd_encoder_diff;
-						}
+                                  if (lcd_encoder_steps < 0) {
+                                    bowden_length[cursor_pos]++;
+                                    lcd_set_cursor(13, 1);
+                                    lcd_print(bowden_length[cursor_pos] - 48);
+                                    lcd_encoder_steps = 0;
+                                  }
 				}
 				_delay(100);
 				if (lcd_clicked()) {
@@ -5994,7 +5938,6 @@ void bowden_menu() {
 					if (lcd_show_fullscreen_message_yes_no_and_wait_P(PSTR("Continue with another bowden?"))) {
 						lcd_update_enable(true);
 						lcd_clear();
-						enc_dif = lcd_encoder_diff;
 						lcd_set_cursor(0, cursor_pos);
 						lcd_print(">");
 						for (uint_least8_t i = 0; i < 4; i++) {
@@ -6024,38 +5967,33 @@ static char snmm_stop_print_menu() { //menu for choosing which filaments will be
 	lcd_puts_at_P(1,2,_i("Used during print"));////MSG_USED c=19 r=1
 	lcd_puts_at_P(1,3,_i("Current"));////MSG_CURRENT c=19 r=1
 	char cursor_pos = 1;
-	int enc_dif = 0;
 	KEEPALIVE_STATE(PAUSED_FOR_USER);
 	lcd_consume_click();
 	while (1) {
 		manage_heater();
 		manage_inactivity(true);
-		if (abs((enc_dif - lcd_encoder_diff)) > 4) {
+		if (lcd_encoder_steps){
+                  cursor_pos += lcd_encoder_steps;
+                  lcd_encoder_steps = 0;
+                  if (cursor_pos > 3) {
+                    cursor_pos = 3;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                  }
+                  if (cursor_pos < 1){
+                    cursor_pos = 1;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                  }
 
-			if ((abs(enc_dif - lcd_encoder_diff)) > 1) {
-				if (enc_dif > lcd_encoder_diff) cursor_pos--;
-				if (enc_dif < lcd_encoder_diff) cursor_pos++;
-				if (cursor_pos > 3) {
-					cursor_pos = 3;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-				}
-				if (cursor_pos < 1){
-					cursor_pos = 1;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-				}	
-
-				lcd_set_cursor(0, 1);
-				lcd_print(" ");
-				lcd_set_cursor(0, 2);
-				lcd_print(" ");
-				lcd_set_cursor(0, 3);
-				lcd_print(" ");
-				lcd_set_cursor(0, cursor_pos);
-				lcd_print(">");
-				enc_dif = lcd_encoder_diff;
-				Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-				_delay(100);
-			}
+                  lcd_set_cursor(0, 1);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 2);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 3);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, cursor_pos);
+                  lcd_print(">");
+                  Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+                  _delay(100);
 		}
 		if (lcd_clicked()) {
 			Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
@@ -6084,9 +6022,8 @@ uint8_t choose_menu_P(const char *header, const char *item, const char *last_ite
     const int8_t items_no = last_item?(mmu_enabled?6:5):(mmu_enabled?5:4);
     const uint8_t item_len = item?strlen_P(item):0;
 	int8_t first = 0;
-	int8_t enc_dif = lcd_encoder_diff;
 	int8_t cursor_pos = 1;
-	
+
 	lcd_clear();
 
 	KEEPALIVE_STATE(PAUSED_FOR_USER);
@@ -6094,81 +6031,64 @@ uint8_t choose_menu_P(const char *header, const char *item, const char *last_ite
 	{
 		manage_heater();
 		manage_inactivity(true);
+		if (lcd_encoder_steps){
+                  cursor_pos += lcd_encoder_steps;
+                  lcd_encoder_steps = 0;
 
-		if (abs((enc_dif - lcd_encoder_diff)) > 4)
-		{
-            if (enc_dif > lcd_encoder_diff)
-            {
-                cursor_pos--;
-            }
+                  if (cursor_pos > 3) {
+                    Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+                    cursor_pos = 3;
+                    if (first < items_no - 3)
+                      {
+                        first++;
+                        lcd_clear();
+                      }
+                  }
 
-            if (enc_dif < lcd_encoder_diff)
-            {
-                cursor_pos++;
-            }
-            enc_dif = lcd_encoder_diff;
-			Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-		}
+                  if (cursor_pos < 1) {
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                    cursor_pos = 1;
+                    if (first > 0)
+                      {
+                        first--;
+                        lcd_clear();
+                      }
+                  }
+                }
+                if (header) lcd_puts_at_P(0,0,header);
 
-		if (cursor_pos > 3)
-		{		
-            cursor_pos = 3;
-            if (first < items_no - 3)
-            {
-                first++;
-                lcd_clear();
-            } else { // here we are at the very end of the list
-				Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-            }
-        }
+                const bool last_visible = (first == items_no - 3);
+                const uint_least8_t ordinary_items = (last_item&&last_visible)?2:3;
 
-        if (cursor_pos < 1)
-        {
-            cursor_pos = 1;
-            if (first > 0)
-            {
-                first--;
-                lcd_clear();
-            } else { // here we are at the very end of the list
-				Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-            }
-        }
+                for (uint_least8_t i = 0; i < ordinary_items; i++)
+                  {
+                    if (item) lcd_puts_at_P(1, i + 1, item);
+                  }
 
-        if (header) lcd_puts_at_P(0,0,header);
+                for (uint_least8_t i = 0; i < ordinary_items; i++)
+                  {
+                    lcd_set_cursor(2 + item_len, i+1);
+                    lcd_print(first + i + 1);
+                  }
 
-        const bool last_visible = (first == items_no - 3);
-        const uint_least8_t ordinary_items = (last_item&&last_visible)?2:3;
+                if (last_item&&last_visible) lcd_puts_at_P(1, 3, last_item);
 
-        for (uint_least8_t i = 0; i < ordinary_items; i++)
-        {
-            if (item) lcd_puts_at_P(1, i + 1, item);
-        }
+                lcd_set_cursor(0, 1);
+                lcd_print(" ");
+                lcd_set_cursor(0, 2);
+                lcd_print(" ");
+                lcd_set_cursor(0, 3);
+                lcd_print(" ");
+                lcd_set_cursor(0, cursor_pos);
+                lcd_print(">");
+                _delay(100);
 
-        for (uint_least8_t i = 0; i < ordinary_items; i++)
-        {
-            lcd_set_cursor(2 + item_len, i+1);
-            lcd_print(first + i + 1);
-        }
-
-        if (last_item&&last_visible) lcd_puts_at_P(1, 3, last_item);
-
-        lcd_set_cursor(0, 1);
-        lcd_print(" ");
-        lcd_set_cursor(0, 2);
-        lcd_print(" ");
-        lcd_set_cursor(0, 3);
-        lcd_print(" ");
-        lcd_set_cursor(0, cursor_pos);
-        lcd_print(">");
-        _delay(100);
-
-		if (lcd_clicked())
-		{
-			Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
-		    KEEPALIVE_STATE(IN_HANDLER);
-			lcd_encoder_diff = 0;
-			return(cursor_pos + first - 1);
-		}
+                if (lcd_clicked())
+                  {
+                    Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
+                    KEEPALIVE_STATE(IN_HANDLER);
+                    return(cursor_pos + first - 1);
+                  }
 	}
 }
 
@@ -6179,10 +6099,9 @@ char reset_menu() {
 	int items_no = 4;
 #endif
 	static int first = 0;
-	int enc_dif = 0;
 	char cursor_pos = 0;
 	const char *item [items_no];
-	
+
 	item[0] = "Language";
 	item[1] = "Statistics";
 	item[2] = "Shipping prep";
@@ -6191,73 +6110,61 @@ char reset_menu() {
 	item[4] = "Bowden length";
 #endif // SNMM
 
-	enc_dif = lcd_encoder_diff;
 	lcd_clear();
 	lcd_set_cursor(0, 0);
 	lcd_print(">");
 	lcd_consume_click();
-	while (1) {		
+	while (1) {
 
-		for (uint_least8_t i = 0; i < 4; i++) {
-			lcd_set_cursor(1, i);
-			lcd_print(item[first + i]);
-		}
+          for (uint_least8_t i = 0; i < 4; i++) {
+            lcd_set_cursor(1, i);
+            lcd_print(item[first + i]);
+          }
 
-		manage_heater();
-		manage_inactivity(true);
+          manage_heater();
+          manage_inactivity(true);
 
-		if (abs((enc_dif - lcd_encoder_diff)) > 4) {
+          if (lcd_encoder_steps){
+            cursor_pos += lcd_encoder_steps;
+            lcd_encoder_steps = 0;
 
-			if ((abs(enc_dif - lcd_encoder_diff)) > 1) {
-				if (enc_dif > lcd_encoder_diff) {
-					cursor_pos--;
-				}
+            if (cursor_pos > 3) {
+              cursor_pos = 3;
+              Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+              if (first < items_no - 4) {
+                first++;
+                lcd_clear();
+              }
+            }
 
-				if (enc_dif < lcd_encoder_diff) {
-					cursor_pos++;
-				}
+            if (cursor_pos < 0) {
+              cursor_pos = 0;
+              Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+              if (first > 0) {
+                first--;
+                lcd_clear();
+              }
+            }
+            lcd_set_cursor(0, 0);
+            lcd_print(" ");
+            lcd_set_cursor(0, 1);
+            lcd_print(" ");
+            lcd_set_cursor(0, 2);
+            lcd_print(" ");
+            lcd_set_cursor(0, 3);
+            lcd_print(" ");
+            lcd_set_cursor(0, cursor_pos);
+            lcd_print(">");
+            Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+            _delay(100);
+          }
 
-				if (cursor_pos > 3) {
-					cursor_pos = 3;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-					if (first < items_no - 4) {
-						first++;
-						lcd_clear();
-					}
-				}
-
-				if (cursor_pos < 0) {
-					cursor_pos = 0;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-					if (first > 0) {
-						first--;
-						lcd_clear();
-					}
-				}
-				lcd_set_cursor(0, 0);
-				lcd_print(" ");
-				lcd_set_cursor(0, 1);
-				lcd_print(" ");
-				lcd_set_cursor(0, 2);
-				lcd_print(" ");
-				lcd_set_cursor(0, 3);
-				lcd_print(" ");
-				lcd_set_cursor(0, cursor_pos);
-				lcd_print(">");
-				Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-				enc_dif = lcd_encoder_diff;
-				_delay(100);
-			}
-
-		}
-
-		if (lcd_clicked()) {
-			Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
-			return(cursor_pos + first);
-		}
+          if (lcd_clicked()) {
+            Sound_MakeSound(e_SOUND_TYPE_ButtonEcho);
+            return(cursor_pos + first);
+          }
 
 	}
-
 }
 
 static void lcd_disable_farm_mode()
@@ -6455,7 +6362,6 @@ void unload_filament()
 static void lcd_farm_no()
 {
 	char step = 0;
-	int enc_dif = 0;
 	int _farmno = farm_no;
 	int _ret = 0;
 	lcd_clear();
@@ -6466,26 +6372,25 @@ static void lcd_farm_no()
 	do
 	{
 
-		if (abs((enc_dif - lcd_encoder_diff)) > 2) {
-			if (enc_dif > lcd_encoder_diff) {
-				switch (step) {
-				case(0): if (_farmno >= 100) _farmno -= 100; break;
-				case(1): if (_farmno % 100 >= 10) _farmno -= 10; break;
-				case(2): if (_farmno % 10 >= 1) _farmno--; break;
-				default: break;
-				}
-			}
+		if (lcd_encoder_steps) {
+                  if (lcd_encoder_steps>0) {
+                    switch (step) {
+                    case(0): if (_farmno >= 100) _farmno -= 100; break;
+                    case(1): if (_farmno % 100 >= 10) _farmno -= 10; break;
+                    case(2): if (_farmno % 10 >= 1) _farmno--; break;
+                    default: break;
+                    }
+                  }
 
-			if (enc_dif < lcd_encoder_diff) {
-				switch (step) {
-				case(0): if (_farmno < 900) _farmno += 100; break;
-				case(1): if (_farmno % 100 < 90) _farmno += 10; break;
-				case(2): if (_farmno % 10 <= 8)_farmno++; break;
-				default: break;
-				}
-			}
-			enc_dif = 0;
-			lcd_encoder_diff = 0;
+                  if (lcd_encoder_steps<0) {
+                    switch (step) {
+                    case(0): if (_farmno < 900) _farmno += 100; break;
+                    case(1): if (_farmno % 100 < 90) _farmno += 10; break;
+                    case(2): if (_farmno % 10 <= 8)_farmno++; break;
+                    default: break;
+                    }
+                  }
+                  lcd_encoder_steps = 0;
 		}
 
 		lcd_set_cursor(0, 2);
@@ -6531,9 +6436,7 @@ unsigned char lcd_choose_color() {
 	//-----------------------------------------------------
 	uint_least8_t active_rows;
 	static int first = 0;
-	int enc_dif = 0;
 	unsigned char cursor_pos = 1;
-	enc_dif = lcd_encoder_diff;
 	lcd_clear();
 	lcd_set_cursor(0, 1);
 	lcd_print(">");
@@ -6550,44 +6453,44 @@ unsigned char lcd_choose_color() {
 		manage_heater();
 		manage_inactivity(true);
 		proc_commands();
-		if (abs((enc_dif - lcd_encoder_diff)) > 12) {
-					
-				if (enc_dif > lcd_encoder_diff) {
-					cursor_pos--;
-				}
+		if (abs(lcd_encoder_steps)>2) {
 
-				if (enc_dif < lcd_encoder_diff) {
-					cursor_pos++;
-				}
-				
-				if (cursor_pos > active_rows) {
-					cursor_pos = active_rows;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-					if (first < items_no - active_rows) {
-						first++;
-						lcd_clear();
-					}
-				}
+                  if (lcd_encoder_steps>0) {
+                    cursor_pos--;
+                  }
 
-				if (cursor_pos < 1) {
-					cursor_pos = 1;
-					Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
-					if (first > 0) {
-						first--;
-						lcd_clear();
-					}
-				}
-				lcd_set_cursor(0, 1);
-				lcd_print(" ");
-				lcd_set_cursor(0, 2);
-				lcd_print(" ");
-				lcd_set_cursor(0, 3);
-				lcd_print(" ");
-				lcd_set_cursor(0, cursor_pos);
-				lcd_print(">");
-				Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-				enc_dif = lcd_encoder_diff;
-				_delay(100);
+                  if (lcd_encoder_steps<0) {
+                    cursor_pos++;
+                  }
+                  lcd_encoder_steps = 0;
+
+                  if (cursor_pos > active_rows) {
+                    cursor_pos = active_rows;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                    if (first < items_no - active_rows) {
+                      first++;
+                      lcd_clear();
+                    }
+                  }
+
+                  if (cursor_pos < 1) {
+                    cursor_pos = 1;
+                    Sound_MakeSound(e_SOUND_TYPE_BlindAlert);
+                    if (first > 0) {
+                      first--;
+                      lcd_clear();
+                    }
+                  }
+                  lcd_set_cursor(0, 1);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 2);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, 3);
+                  lcd_print(" ");
+                  lcd_set_cursor(0, cursor_pos);
+                  lcd_print(">");
+                  Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+                  _delay(100);
 
 		}
 
@@ -6607,12 +6510,10 @@ unsigned char lcd_choose_color() {
 void lcd_confirm_print()
 {
 	uint8_t filament_type;
-	int enc_dif = 0;
 	int cursor_pos = 1;
 	int _ret = 0;
 	int _t = 0;
 
-	enc_dif = lcd_encoder_diff;
 	lcd_clear();
 
 	lcd_set_cursor(0, 0);
@@ -6620,15 +6521,15 @@ void lcd_confirm_print()
 
 	do
 	{
-		if (abs(enc_dif - lcd_encoder_diff) > 12) {
-			if (enc_dif > lcd_encoder_diff) {
-				cursor_pos--;
+		if (abs(lcd_encoder_steps) > 2) {
+			if (lcd_encoder_steps > 0) {
+                          cursor_pos--;
 			}
 
-			if (enc_dif < lcd_encoder_diff) {
+			if (lcd_encoder_steps < 0) {
 				cursor_pos++;
 			}
-			enc_dif = lcd_encoder_diff;
+			lcd_encoder_steps = 0;
 		}
 
 		if (cursor_pos > 2) { cursor_pos = 2; }
@@ -8267,8 +8168,6 @@ static bool lcd_selftest_manual_fan_check(int _fan, bool check_opposite,
 	lcd_set_cursor(0, 3); lcd_print(">");
 	lcd_set_cursor(1, 3); lcd_puts_P(_T(MSG_SELFTEST_FAN_NO));
 
-	int8_t enc_dif = int(_default)*3;
-
 	KEEPALIVE_STATE(PAUSED_FOR_USER);
 
 	lcd_button_pressed = false;
@@ -8291,24 +8190,24 @@ static bool lcd_selftest_manual_fan_check(int _fan, bool check_opposite,
 #endif //FAN_SOFT_PWM
 			break;
 		}
-		if (abs((enc_dif - lcd_encoder_diff)) > 2) {
-			if (enc_dif > lcd_encoder_diff) {
-				_result = !check_opposite;
-				lcd_set_cursor(0, 2); lcd_print(">");
-				lcd_set_cursor(1, 2); lcd_puts_P(_T(MSG_SELFTEST_FAN_YES));
-				lcd_set_cursor(0, 3); lcd_print(" ");
-				lcd_set_cursor(1, 3); lcd_puts_P(_T(MSG_SELFTEST_FAN_NO));
+		if (lcd_encoder_steps) {
+			if (lcd_encoder_steps>0 || _default) {
+                          _default = false;
+                          _result = !check_opposite;
+                          lcd_set_cursor(0, 2); lcd_print(">");
+                          lcd_set_cursor(1, 2); lcd_puts_P(_T(MSG_SELFTEST_FAN_YES));
+                          lcd_set_cursor(0, 3); lcd_print(" ");
+                          lcd_set_cursor(1, 3); lcd_puts_P(_T(MSG_SELFTEST_FAN_NO));
 			}
 
-			if (enc_dif < lcd_encoder_diff) {
-				_result = check_opposite;
-				lcd_set_cursor(0, 2); lcd_print(" ");
-				lcd_set_cursor(1, 2); lcd_puts_P(_T(MSG_SELFTEST_FAN_YES));
-				lcd_set_cursor(0, 3); lcd_print(">");
-				lcd_set_cursor(1, 3); lcd_puts_P(_T(MSG_SELFTEST_FAN_NO));
+			if (lcd_encoder_steps<0) {
+                          _result = check_opposite;
+                          lcd_set_cursor(0, 2); lcd_print(" ");
+                          lcd_set_cursor(1, 2); lcd_puts_P(_T(MSG_SELFTEST_FAN_YES));
+                          lcd_set_cursor(0, 3); lcd_print(">");
+                          lcd_set_cursor(1, 3); lcd_puts_P(_T(MSG_SELFTEST_FAN_NO));
 			}
-			enc_dif = 0;
-			lcd_encoder_diff = 0;
+			lcd_encoder_steps = 0;
 		}
 
 
@@ -8638,7 +8537,7 @@ void ultralcd_init()
   WRITE(SDCARDDETECT, HIGH);
   lcd_oldcardstatus = IS_SD_INSERTED;
 #endif//(SDCARDDETECT > 0)
-  lcd_encoder_diff = 0;
+  lcd_encoder_steps = 0;
 }
 
 
@@ -8868,12 +8767,12 @@ void menu_lcd_lcdupdate_func(void)
         }
     }
 #endif//CARDINSERTED
-    if (lcd_encoder_steps())
-    { // this looks like it's jumping the gun, but it still won't do anything until the next update fires on schedule
+    if (lcd_encoder_steps) {
+       // this looks like it's jumping the gun, but it still won't do anything until the next update fires on schedule
+      lcd_encoder += lcd_encoder_steps;
+      lcd_encoder_steps = 0;
       if (lcd_draw_update == 0) lcd_draw_update = 1;
-      lcd_encoder += lcd_encoder_steps();
       Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-      lcd_encoder_diff = 0;
       lcd_timeoutToStatus.start();
     }
 

@@ -90,8 +90,8 @@ extern int32_t lcd_encoder;
 
 extern uint8_t lcd_encoder_bits;
 
-// lcd_encoder_diff is updated from interrupt context and added to lcd_encoder every LCD update
-extern int8_t lcd_encoder_diff;
+// lcd_encoder_steps is updated from interrupt context.  It counts full steps from detent to detent.
+extern int8_t lcd_encoder_steps;
 
 //the last checked lcd_buttons in a bit array.
 extern uint8_t lcd_buttons;
@@ -126,8 +126,6 @@ extern void lcd_update(uint8_t lcdDrawUpdateOverride);
 extern void lcd_update_enable(uint8_t enabled);
 
 extern void lcd_buttons_update(void);
-
-extern int lcd_encoder_steps(void);
 
 //! @brief Helper class to temporarily disable LCD updates
 //!
@@ -177,16 +175,6 @@ private:
 //! @retval 0 button was not clicked
 //! @retval 1 button was clicked
 #define LCD_CLICKED (lcd_buttons&EN_C)
-
-////////////////////////
-// Setup Rotary Encoder Bit Values (for two pin encoders to indicate movement)
-// These values are independent of which pins are used for EN_A and EN_B indications
-// The rotary encoder part is also independent to the chipset used for the LCD
-#define encrot0 0
-#define encrot1 2
-#define encrot2 3
-#define encrot3 1
-
 
 //Custom characters defined in the first 8 characters of the LCD
 #define LCD_STR_BEDTEMP     "\x00"

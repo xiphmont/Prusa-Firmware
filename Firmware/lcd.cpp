@@ -625,7 +625,7 @@ void lcd_printFloat(double number, uint8_t digits)
 uint8_t lcd_draw_update = 2;
 int32_t lcd_encoder = 0;
 uint8_t lcd_encoder_bits = 0;
-int8_t lcd_encoder_diff = 0;
+int8_t  lcd_encoder_steps = 0;
 
 uint8_t lcd_buttons = 0;
 uint8_t lcd_button_pressed = 0;
@@ -704,7 +704,7 @@ void lcd_update_enable(uint8_t enabled)
 		if (enabled)
 		{ // Reset encoder position. This is equivalent to re-entering a menu.
 			lcd_encoder = 0;
-			lcd_encoder_diff = 0;
+			lcd_encoder_steps = 0;
 			// Enabling the normal LCD update procedure.
 			// Reset the timeout interval.
 			lcd_timeoutToStatus.start();
@@ -769,46 +769,32 @@ void lcd_buttons_update(void)
 	uint8_t enc = 0;
 	if (lcd_buttons & EN_A) enc |= B01;
 	if (lcd_buttons & EN_B) enc |= B10;
+
+        // this is a standard two-bit encoder with signals in
+        // quadrature (gray code).  Detents should be at the 'off/off'
+        // position.  Don't just count bit changes, know where we
+        // *are* and where we *were*. Place the step transition
+        // halfway between detents.
+
 	if (enc != lcd_encoder_bits)
 	{
 		switch (enc)
 		{
-		case encrot0:
-			if (lcd_encoder_bits == encrot3)
-				lcd_encoder_diff++;
-			else if (lcd_encoder_bits == encrot1)
-				lcd_encoder_diff--;
-			break;
-		case encrot1:
-			if (lcd_encoder_bits == encrot0)
-				lcd_encoder_diff++;
-			else if (lcd_encoder_bits == encrot2)
-				lcd_encoder_diff--;
-			break;
-		case encrot2:
-			if (lcd_encoder_bits == encrot1)
-				lcd_encoder_diff++;
-			else if (lcd_encoder_bits == encrot3)
-				lcd_encoder_diff--;
-			break;
-		case encrot3:
-			if (lcd_encoder_bits == encrot2)
-				lcd_encoder_diff++;
-			else if (lcd_encoder_bits == encrot0)
-				lcd_encoder_diff--;
-			break;
+		case B00:  // detent
+                  break;
+		case B10:  // clockwise from detent
+                  if (lcd_encoder_bits == B11)
+                    lcd_encoder_steps--;
+                  break;
+		case B11: // halfway between
+                  break;
+		case B01:  // CCW from detent
+                  if (lcd_encoder_bits == B11)
+                    lcd_encoder_steps++;
+                  break;
 		}
 	}
 	lcd_encoder_bits = enc;
-}
-
-int lcd_encoder_steps() {
-  // allow for some jitter on the boundary
-  if (lcd_encoder_diff < 0){
-    return (lcd_encoder_diff-1)/ ENCODER_PULSES_PER_STEP;
-  }else{
-    return (lcd_encoder_diff+1)/ ENCODER_PULSES_PER_STEP;
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
