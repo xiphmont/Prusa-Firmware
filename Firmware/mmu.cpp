@@ -12,6 +12,7 @@
 #include "ultralcd.h"
 #include "sound.h"
 #include "printers.h"
+#include "messages.h"
 #include <avr/pgmspace.h>
 #include "io_atmega2560.h"
 #include "AutoDeplete.h"
@@ -1516,6 +1517,8 @@ void lcd_mmu_load_to_nozzle(uint8_t filament_nr)
         lcd_puts_P(_T(MSG_LOADING_FILAMENT));
         lcd_print(" ");
         lcd_print(tmp_extruder + 1);
+        custom_message_type = CustomMsg::FilamentLoading;
+        lcd_setstatuspgm(_T(MSG_LOADING_FILAMENT));
         mmu_command(MmuCmd::T0 + tmp_extruder);
         manage_response(true, true, MMU_TCODE_MOVE);
         mmu_continue_loading(false);
@@ -1524,13 +1527,13 @@ void lcd_mmu_load_to_nozzle(uint8_t filament_nr)
         mmu_load_to_nozzle();
         load_filament_final_feed();
         st_synchronize();
-        custom_message_type = CustomMsg::FilamentLoading;
-        lcd_setstatuspgm(_T(MSG_LOADING_FILAMENT));
         lcd_return_to_status();
         lcd_update_enable(true);
         lcd_load_filament_color_check();
-        lcd_setstatuspgm(_T(WELCOME_MSG));
-        custom_message_type = CustomMsg::Status;
+        if(custom_message_type != CustomMsg::CheckEngine){
+          lcd_setstatuspgm(_T(WELCOME_MSG));
+          custom_message_type = CustomMsg::Status;
+        }
     }
     else
     {
@@ -1748,21 +1751,22 @@ void mmu_continue_loading(bool blocking)
     bool success = load_more();
     if (success){
         success = can_load();
-        if (mmu_fil_extruder_sensor_spurious_empty){
-          lcd_setstatuspgm(_i("IR sensor 'ON' readings appear unreliable"));
-          if (menu_depth>0) { // proxy test for 'triggered from a menu'
-            lcd_set_cursor(0, 2);
-            lcd_puts_P(PSTR("WARN: IR sensor 'ON'"));
-            lcd_set_cursor(0, 3);
-            lcd_puts_P(PSTR("reading unreliable"));
-          }
-          custom_message_type = CustomMsg::CheckEngine;
-        }else if(!success){
+        if(!success){
           lcd_setstatuspgm(_i("Load jam, retrying"));
           DEBUG_PUTS_P(PSTR("Apparent load jam; retrying"));
           if (menu_depth>0) { // proxy test for 'triggered from a menu'
             lcd_set_cursor(0, 2);
             lcd_puts_P(PSTR("Load jam; retrying"));
+          }
+          custom_message_type = CustomMsg::CheckEngine;
+        }else if (mmu_fil_extruder_sensor_spurious_empty){
+          custom_message_type = CustomMsg::CheckEngine;
+          lcd_setstatuspgm(PSTR("IR sensor ON signal unstable; check calibration."));
+          if (menu_depth>0) { // proxy test for 'triggered from a menu'
+            lcd_set_cursor(0, 2);
+            lcd_puts_P(PSTR("IR sensor ON signal"));
+            lcd_set_cursor(0, 3);
+            lcd_puts_P(PSTR("unstable, check cal."));
           }
           custom_message_type = CustomMsg::CheckEngine;
         }
@@ -1799,18 +1803,28 @@ void mmu_continue_loading(bool blocking)
             success = load_more();
             if (success){
               success = can_load();
-              if (mmu_fil_extruder_sensor_spurious_empty){
-                lcd_setstatuspgm(_i("IR sensor ON marginal"));
-                DEBUG_PUTS_P(PSTR("IR sensor 'ON' state appears to be marginal; calibration probelm or damaged filament?"));
-                custom_message_type = CustomMsg::CheckEngine;
-              }else if(!success){
+              if(!success){
                 lcd_setstatuspgm(_i("Load jam, retrying"));
                 DEBUG_PUTS_P(PSTR("Apparent load jam; retrying"));
-                custom_message_type = CustomMsg::Status;
+                if (menu_depth>0) { // proxy test for 'triggered from a menu'
+                  lcd_set_cursor(0, 2);
+                  lcd_puts_P(PSTR("Load jam; retrying"));
+                }
+                custom_message_type = CustomMsg::CheckEngine;
+                ++retry; // overflow not handled, as it is not dangerous.
+                if (retry >= max_retry) state = Ls::Unload;
+              }else if (mmu_fil_extruder_sensor_spurious_empty){
+                custom_message_type = CustomMsg::CheckEngine;
+                lcd_setstatuspgm(PSTR("IR sensor ON signal unstable; check calibration."));
+                if (menu_depth>0) { // proxy test for 'triggered from a menu'
+                  lcd_set_cursor(0, 2);
+                  lcd_puts_P(PSTR("IR sensor ON signal"));
+                  lcd_set_cursor(0, 3);
+                  lcd_puts_P(PSTR("unstable, check cal."));
+                }
+                custom_message_type = CustomMsg::CheckEngine;
               }
             }
-            ++retry; // overflow not handled, as it is not dangerous.
-            if (retry >= max_retry) state = Ls::Unload;
             break;
         case Ls::Unload:
             stop_and_save_print_to_ram(0, 0);
@@ -1851,5 +1865,7 @@ void mmu_continue_loading(bool blocking)
             break;
         }
     }
+    lcd_setstatuspgm(_T(WELCOME_MSG));
+    custom_message_type = CustomMsg::Status;
     mmu_fil_extruder_loaded = true;
 }
