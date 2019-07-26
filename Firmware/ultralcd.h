@@ -23,6 +23,7 @@ void lcd_setstatuspgm(const char* message);
 void lcd_setalertstatuspgm(const char* message);
 //! only update the alert message on the main status screen
 //! has no sideeffects, may be called multiple times
+void lcd_updatestatus(const char *message);
 void lcd_updatestatuspgm(const char *message);
 
 void lcd_reset_alert_level();

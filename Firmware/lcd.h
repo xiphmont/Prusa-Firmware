@@ -127,6 +127,8 @@ extern void lcd_update_enable(uint8_t enabled);
 
 extern void lcd_buttons_update(void);
 
+extern int lcd_encoder_steps(void);
+
 //! @brief Helper class to temporarily disable LCD updates
 //!
 //! When constructed (on stack), original state state of lcd_update_enabled is stored

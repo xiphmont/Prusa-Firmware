@@ -802,6 +802,14 @@ void lcd_buttons_update(void)
 	lcd_encoder_bits = enc;
 }
 
+int lcd_encoder_steps() {
+  // allow for some jitter on the boundary
+  if (lcd_encoder_diff < 0){
+    return (lcd_encoder_diff-1)/ ENCODER_PULSES_PER_STEP;
+  }else{
+    return (lcd_encoder_diff+1)/ ENCODER_PULSES_PER_STEP;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Custom character data

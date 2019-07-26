@@ -91,8 +91,9 @@ static float manual_feedrate[] = MANUAL_FEEDRATE;
 /* !Configuration settings */
 
 uint8_t scrollstuff = 0;
+uint32_t scrollmillis = 0;
 uint8_t lcd_status_message_level;
-char lcd_status_message[LONG_FILENAME_LENGTH] = ""; //////WELCOME!
+char lcd_status_message[LONG_FILENAME_LENGTH+20+1] = ""; //////WELCOME!
 unsigned char firstrun = 1;
 
 static uint8_t lay1cal_filament = 0;
@@ -306,191 +307,110 @@ bool bSettings;                                   // flag (i.e. 'fake parameter'
 
 const char STR_SEPARATOR[] PROGMEM = "------------";
 
+static void pad_message(const char *msg, uint8_t col, uint8_t row)
+{
+  uint8_t w = LCD_WIDTH - col;
+  lcd_set_cursor(col, row);
+  while(*msg && w){
+    lcd_print(*msg++);
+    w--;
+  }
+  while(w--){
+    lcd_print(' ');
+  }
+}
 
+#define SCROLLDELAY 6 // pre and post; stick before starting, stick at the end
 static void scroll_message(const char *msg, uint8_t col, uint8_t row)
 {
   uint8_t w = LCD_WIDTH - col;
   uint8_t l = strlen(msg);
+  lcd_set_cursor(col, row);
   if(l > w){
-    bool inters = false;
-    uint8_t gh = scrollstuff;
-    while ((gh - scrollstuff < w) && !inters) {
-      lcd_set_cursor(gh - scrollstuff + col, row);
-      if (msg[gh] == '\0') {
-        for (gh -= scrollstuff; gh<w; gh++) lcd_print(' ');
-        inters = true;
-      }else{
-        lcd_print(msg[gh]);
-        gh++;
-      }
+    int8_t x = 0;
+    int8_t i = scrollstuff - SCROLLDELAY;
+    if (i+w > l) i = l-w;
+    if (i < 0) i = 0;
+    while ((x < w) && msg[i]!='\0') {
+      lcd_print(msg[i++]);
+      x++;
     }
-    scrollstuff++;
-    if(inters) scrollstuff = 0;
+    if(scrollstuff && scrollmillis <= _millis()){
+      if(scrollstuff - SCROLLDELAY*2 + w > l)
+        scrollstuff = 0;
+      scrollstuff++;
+      scrollmillis = _millis() + 350; // no more often than every 350ms
+    }
+    if (!scrollstuff) scrollstuff=1;
   } else {
-    lcd_set_cursor(col, row);
-    lcd_print(msg);
-    while (l++<w) {
-      lcd_print(' ');
-    }
+    pad_message(msg, 1, row);
+    scrollstuff = 0;
+    scrollmillis = 0;
   }
 }
 
-#if 1
+// this performs the scroll internally to lessen load on the SD card.  Otherwise it could simply return.
 static void lcd_implementation_drawmenu_sdfile_selected(uint8_t row, char* longFilename)
 {
-    bool noscroll = true;
-    int enc_dif = lcd_encoder_diff;
     int i;
     for(i = 0; i<4; i++){
       lcd_set_cursor(0, i);
-      lcd_print(' ');
+      if(i==row)
+        lcd_print('>');
+      else
+        lcd_print(' ');
     }
+    if(longFilename[0]=='\0') return;
+    // use the status message buffer as storage for the string
+    lcd_updatestatus(longFilename);
+    lcd_timeoutToStatus.start();
 
-    lcd_set_cursor(0, row);
-    lcd_print('>');
-    scrollstuff = 0;
-
-    do {
-      scroll_message(longFilename, 1, row);
-      for(i = 0; i<300; i++){
-        manage_heater();
-        if(LCD_CLICKED || ( enc_dif != lcd_encoder_diff )){
-          scrollstuff = 0;
-          break;
-        }else{
-          if (noscroll) _delay_ms(3);	//wait around 1.2 s to start scrolling text
-          _delay_ms(1);			//then scroll with redrawing every 300 ms
-        }
+    while(1){
+      manage_heater();
+      scroll_message(lcd_status_message, 1, row);
+      if (lcd_timeoutToStatus.expired(LCD_TIMEOUT_TO_STATUS) ||
+          LCD_CLICKED ||
+          lcd_encoder_steps()){
+        scrollstuff = 0;
+        pad_message(lcd_status_message, 1, row);
+        lcd_setstatuspgm(_T(WELCOME_MSG)); // as close as we have to 'clear the status line'
+        break;
       }
-      noscroll = false;
-    } while (scrollstuff);
-}
-#else
-
-static void lcd_implementation_drawmenu_sdfile_selected(uint8_t row, char* longFilename)
-{
-  char c;
-  int enc_dif = lcd_encoder_diff;
-  uint8_t n = LCD_WIDTH - 1;
-     for(uint_least8_t g = 0; g<4;g++){
-       lcd_set_cursor(0, g);
-       lcd_print(' ');
-     }
-     lcd_set_cursor(0, row);
-     lcd_print('>');
-     int i = 1;
-     int j = 0;
-     char* longFilenameTMP = longFilename;
-
-     while((c = *longFilenameTMP) != '\0')
-       {
-         lcd_set_cursor(i, row);
-         lcd_print(c);
-         i++;
-         longFilenameTMP++;
-         if(i==LCD_WIDTH){
-           i=1;
-           j++;
-           longFilenameTMP = longFilename + j;          
-           n = LCD_WIDTH - 1;
-           for(int g = 0; g<300 ;g++){
-             manage_heater();
-             if(LCD_CLICKED || ( enc_dif != lcd_encoder_diff )){
-               longFilenameTMP = longFilename;
-               *(longFilenameTMP + LCD_WIDTH - 2) = '\0';
-               i = 1;
-               j = 0;
-               break;
-             }else{
-               if (j == 1) _delay_ms(3);       //wait around 1.2 s to start scrolling text
-               _delay_ms(1);                           //then scroll with redrawing every 300 ms 
-             }
-           }
-         }
+      _delay(100);
     }
-     if(c!='\0'){
-       lcd_set_cursor(i, row);
-       lcd_print(c);
-       i++;
-     }
-     n=n-i+1;
-     while(n--)
-       lcd_print(' ');
 }
-#endif
 
 static void lcd_implementation_drawmenu_sdfile(uint8_t row, const char* filename, char* longFilename)
 {
-    char c;
-    uint8_t n = LCD_WIDTH - 1;
     lcd_set_cursor(0, row);
     lcd_print(' ');
-    if (longFilename[0] != '\0')
-    {
-        filename = longFilename;
-        longFilename[LCD_WIDTH-1] = '\0';
-    }
-    while( ((c = *filename) != '\0') && (n>0) )
-    {
-        lcd_print(c);
-        filename++;
-        n--;
-    }
-    while(n--)
-        lcd_print(' ');
+    if(longFilename[0]=='\0')
+      pad_message(filename, 1, row);
+    else
+      pad_message(longFilename, 1, row);
 }
+
 static void lcd_implementation_drawmenu_sddirectory_selected(uint8_t row, const char* filename, char* longFilename)
 {
-    char c;
-    uint8_t n = LCD_WIDTH - 2;
     lcd_set_cursor(0, row);
     lcd_print('>');
     lcd_print(LCD_STR_FOLDER[0]);
-    if (longFilename[0] != '\0')
-    {
-        filename = longFilename;
-        longFilename[LCD_WIDTH-2] = '\0';
-    }
-    while( ((c = *filename) != '\0') && (n>0) )
-    {
-        lcd_print(c);
-        filename++;
-        n--;
-    }
-    while(n--)
-        lcd_print(' ');
+    if(longFilename[0]=='\0')
+      pad_message(filename, 2, row);
+    else
+      pad_message(longFilename, 2, row);
 }
+
 static void lcd_implementation_drawmenu_sddirectory(uint8_t row, const char* filename, char* longFilename)
 {
-    char c;
-    uint8_t n = LCD_WIDTH - 2;
     lcd_set_cursor(0, row);
     lcd_print(' ');
     lcd_print(LCD_STR_FOLDER[0]);
-    if (longFilename[0] != '\0')
-    {
-        filename = longFilename;
-        longFilename[LCD_WIDTH-2] = '\0';
-    }
-    while( ((c = *filename) != '\0') && (n>0) )
-    {
-        lcd_print(c);
-        filename++;
-        n--;
-    }
-    while(n--)
-        lcd_print(' ');
+    if(longFilename[0]=='\0')
+      pad_message(filename, 2, row);
+    else
+      pad_message(longFilename, 2, row);
 }
-
-
-
-#define MENU_ITEM_SDDIR(str_fn, str_fnl) do { if (menu_item_sddir(str_fn, str_fnl)) return; } while (0)
-//#define MENU_ITEM_SDDIR(str, str_fn, str_fnl) MENU_ITEM(sddirectory, str, str_fn, str_fnl)
-//extern uint8_t menu_item_sddir(const char* str, const char* str_fn, char* str_fnl);
-
-#define MENU_ITEM_SDFILE(str, str_fn, str_fnl) do { if (menu_item_sdfile(str, str_fn, str_fnl)) return; } while (0)
-//#define MENU_ITEM_SDFILE(str, str_fn, str_fnl) MENU_ITEM(sdfile, str, str_fn, str_fnl)
-//extern uint8_t menu_item_sdfile(const char* str, const char* str_fn, char* str_fnl);
 
 
 uint8_t menu_item_sddir(const char* str_fn, char* str_fnl)
@@ -543,7 +463,7 @@ uint8_t menu_item_sddir(const char* str_fn, char* str_fnl)
 #endif //NEW_SD_MENU
 }
 
-static uint8_t menu_item_sdfile(const char* str ,const char* str_fn, char* str_fnl)
+static uint8_t menu_item_sdfile(const char* str_fn, char* str_fnl)
 {
 #ifdef NEW_SD_MENU
 //	printf_P(PSTR("menu sdfile\n"));
@@ -585,19 +505,18 @@ static uint8_t menu_item_sdfile(const char* str ,const char* str_fn, char* str_f
 	menu_item++;
 	return 0;
 #else //NEW_SD_MENU
-        (void)str;
 	if (menu_item == menu_line)
 	{
 		if (lcd_draw_update)
 		{
-                  if (lcd_encoder == menu_item){
-                          //lcd_implementation_drawmenu_sdfile_selected(menu_row, str_fnl);
-                  }else
+                  if (lcd_encoder == menu_item)
+                                lcd_implementation_drawmenu_sdfile_selected(menu_row, str_fnl);
+                  else
 				lcd_implementation_drawmenu_sdfile(menu_row, str_fn, str_fnl);
 		}
 		if (menu_clicked && (lcd_encoder == menu_item))
 		{
-		    lcd_consume_click();
+   		        lcd_consume_click();
 			menu_action_sdfile(str_fn);
 			return menu_item_ret();
 		}
@@ -769,12 +688,14 @@ void lcdui_print_status_line(void)
 {
 	if (IS_SD_PRINTING && (custom_message_type == CustomMsg::Status))
 	{
-          lcd_setstatus(card.longFilename);
+                // we will scroll the filename below
+                lcd_setstatus(card.longFilename);
 	}
 
 	if (heating_status)
 	{ // If heating flag, show progress of heating
-		heating_status_counter++;
+                scrollstuff = 0;
+                heating_status_counter++;
 		if (heating_status_counter > 13)
 		{
 			heating_status_counter = 0;
@@ -820,10 +741,11 @@ void lcdui_print_status_line(void)
 		case CustomMsg::Status: // Nothing special, print status message normally
 		case CustomMsg::CheckEngine: // Soft alert, more important then SD filename
 		case CustomMsg::FilamentLoading: // If loading filament, print status
-                  scroll_message(lcd_status_message,0,3);
+                        scroll_message(lcd_status_message,0,3);
 			break;
                 case CustomMsg::MeshBedLeveling: // If mesh bed leveling in progress, show the status
-			if (custom_message_state > 10)
+                        scrollstuff = 0;
+                        if (custom_message_state > 10)
 			{
 				lcd_set_cursor(0, 3);
 				lcd_puts_P(PSTR("                    "));
@@ -851,6 +773,7 @@ void lcdui_print_status_line(void)
 			}
 			break;
 		case CustomMsg::PidCal: // PID tuning in progress
+                        scrollstuff = 0;
 			lcd_print(lcd_status_message);
 			if (pid_cycle <= pid_number_of_cycles && custom_message_state > 0)
 			{
@@ -861,6 +784,7 @@ void lcdui_print_status_line(void)
 			}
 			break;
 		case CustomMsg::TempCal: // PINDA temp calibration in progress
+                        scrollstuff = 0;
 			{
 				char progress[4];
 				lcd_set_cursor(0, 3);
@@ -871,6 +795,7 @@ void lcdui_print_status_line(void)
 			}
 			break;
 		case CustomMsg::TempCompPreheat: // temp compensation preheat
+                        scrollstuff = 0;
 			lcd_set_cursor(0, 3);
 			lcd_puts_P(_i("PINDA Heating"));////MSG_PINDA_PREHEAT c=20 r=1
 			if (custom_message_state <= PINDA_HEAT_T)
@@ -951,16 +876,12 @@ void lcdui_print_status_screen(void)
 
     lcd_set_cursor(0, 3); //line 3
 
-#ifndef DEBUG_DISABLE_LCD_STATUS_LINE
-	lcdui_print_status_line();
-#endif //DEBUG_DISABLE_LCD_STATUS_LINE
-
 }
 
 // Main status screen. It's up to the implementation specific part to show what is needed. As this is very display dependent
 static void lcd_status_screen()
 {
-	if (firstrun == 1) 
+	if (firstrun == 1)
 	{
 		firstrun = 0;
 		if(lcd_status_message_level == 0)
@@ -975,11 +896,40 @@ static void lcd_status_screen()
 		}
 	}
 
+#ifdef ULTIPANEL_FEEDMULTIPLY
+	// Dead zone at 100% feedrate
+	if ((feedmultiply < 100 && (feedmultiply + int(lcd_encoder)) > 100) ||
+		(feedmultiply > 100 && (feedmultiply + int(lcd_encoder)) < 100))
+	{
+		lcd_encoder = 0;
+		feedmultiply = 100;
+	}
+	if (feedmultiply == 100 && int(lcd_encoder) > ENCODER_FEEDRATE_DEADZONE)
+	{
+		feedmultiply += int(lcd_encoder) - ENCODER_FEEDRATE_DEADZONE;
+		lcd_encoder = 0;
+	}
+	else if (feedmultiply == 100 && int(lcd_encoder) < -ENCODER_FEEDRATE_DEADZONE)
+	{
+		feedmultiply += int(lcd_encoder) + ENCODER_FEEDRATE_DEADZONE;
+		lcd_encoder = 0;
+	}
+	else if (feedmultiply != 100)
+	{
+		feedmultiply += int(lcd_encoder);
+		lcd_encoder = 0;
+	}
+#endif //ULTIPANEL_FEEDMULTIPLY
+
+	if (feedmultiply < 10)
+		feedmultiply = 10;
+	else if (feedmultiply > 999)
+		feedmultiply = 999;
+
 	if (lcd_status_update_delay)
 		lcd_status_update_delay--;
-	else
-		lcd_draw_update = 1;
-
+        else
+                lcd_draw_update= 1;
 
 	if (lcd_draw_update)
 	{
@@ -996,7 +946,17 @@ static void lcd_status_screen()
 		}
 
 		lcdui_print_status_screen();
+        }
 
+        if(scrollstuff || lcd_draw_update) {
+                // when we're srolling the status line, let the scroller handle timing
+#ifndef DEBUG_DISABLE_LCD_STATUS_LINE
+	        lcdui_print_status_line(); 
+#endif //DEBUG_DISABLE_LCD_STATUS_LINE
+        }
+
+	if (lcd_draw_update)
+	{
 		if (farm_mode)
 		{
 			farm_timer--;
@@ -1053,35 +1013,6 @@ static void lcd_status_screen()
 		lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
 	}
 
-#ifdef ULTIPANEL_FEEDMULTIPLY
-	// Dead zone at 100% feedrate
-	if ((feedmultiply < 100 && (feedmultiply + int(lcd_encoder)) > 100) ||
-		(feedmultiply > 100 && (feedmultiply + int(lcd_encoder)) < 100))
-	{
-		lcd_encoder = 0;
-		feedmultiply = 100;
-	}
-	if (feedmultiply == 100 && int(lcd_encoder) > ENCODER_FEEDRATE_DEADZONE)
-	{
-		feedmultiply += int(lcd_encoder) - ENCODER_FEEDRATE_DEADZONE;
-		lcd_encoder = 0;
-	}
-	else if (feedmultiply == 100 && int(lcd_encoder) < -ENCODER_FEEDRATE_DEADZONE)
-	{
-		feedmultiply += int(lcd_encoder) + ENCODER_FEEDRATE_DEADZONE;
-		lcd_encoder = 0;
-	}
-	else if (feedmultiply != 100)
-	{
-		feedmultiply += int(lcd_encoder);
-		lcd_encoder = 0;
-	}
-#endif //ULTIPANEL_FEEDMULTIPLY
-
-	if (feedmultiply < 10)
-		feedmultiply = 10;
-	else if (feedmultiply > 999)
-		feedmultiply = 999;
 }
 
 void lcd_commands()
@@ -2605,13 +2536,14 @@ void lcd_generic_preheat_menu()
     }
     else
     {
-        MENU_ITEM_SUBMENU_P(PSTR("PLA  -  " STRINGIFY(PLA_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(PLA_PREHEAT_HPB_TEMP)),mFilamentItem_PLA);
-        MENU_ITEM_SUBMENU_P(PSTR("PET  -  " STRINGIFY(PET_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(PET_PREHEAT_HPB_TEMP)),mFilamentItem_PET);
-        MENU_ITEM_SUBMENU_P(PSTR("ASA  -  " STRINGIFY(ASA_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(ASA_PREHEAT_HPB_TEMP)),mFilamentItem_ASA);
-        MENU_ITEM_SUBMENU_P(PSTR("ABS  -  " STRINGIFY(ABS_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(ABS_PREHEAT_HPB_TEMP)),mFilamentItem_ABS);
-        MENU_ITEM_SUBMENU_P(PSTR("HIPS -  " STRINGIFY(HIPS_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(HIPS_PREHEAT_HPB_TEMP)),mFilamentItem_HIPS);
-        MENU_ITEM_SUBMENU_P(PSTR("PP   -  " STRINGIFY(PP_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(PP_PREHEAT_HPB_TEMP)),mFilamentItem_PP);
-        MENU_ITEM_SUBMENU_P(PSTR("FLEX -  " STRINGIFY(FLEX_PREHEAT_HOTEND_TEMP) "/" STRINGIFY(FLEX_PREHEAT_HPB_TEMP)),mFilamentItem_FLEX);
+        MENU_ITEM_SUBMENU_P(MSG_PLA_PREHEAT,mFilamentItem_PLA);
+        MENU_ITEM_SUBMENU_P(MSG_PET_PREHEAT,mFilamentItem_PET);
+        MENU_ITEM_SUBMENU_P(MSG_ASA_PREHEAT,mFilamentItem_ASA);
+        MENU_ITEM_SUBMENU_P(MSG_ABS_PREHEAT,mFilamentItem_ABS);
+        MENU_ITEM_SUBMENU_P(MSG_HIPS_PREHEAT,mFilamentItem_HIPS);
+        MENU_ITEM_SUBMENU_P(MSG_PP_PREHEAT,mFilamentItem_PP);
+        MENU_ITEM_SUBMENU_P(MSG_FLEX_PREHEAT,mFilamentItem_FLEX);
+
     }
     if (!eeprom_read_byte((uint8_t*)EEPROM_WIZARD_ACTIVE) && eFilamentAction == FilamentAction::Preheat) MENU_ITEM_FUNCTION_P(_T(MSG_COOLDOWN), lcd_cooldown);
     MENU_END();
@@ -3523,9 +3455,9 @@ bool lcd_calibrate_z_end_stop_manual(bool only_z)
         for (;;) {
             manage_heater();
             manage_inactivity(true);
-            if (abs(lcd_encoder_diff) >= ENCODER_PULSES_PER_STEP) {
+            if (lcd_encoder_steps()){
                 _delay(50);
-                lcd_encoder += abs(lcd_encoder_diff / ENCODER_PULSES_PER_STEP);
+                lcd_encoder += abs(lcd_encoder_steps());
                 lcd_encoder_diff = 0;
                 if (! planner_queue_full()) {
                     // Only move up, whatever direction the user rotates the encoder.
@@ -4824,10 +4756,10 @@ void lcd_calibrate_pinda() {
 
 			//manage_inactivity(true);
 			manage_heater();
-			if (abs(lcd_encoder_diff) >= ENCODER_PULSES_PER_STEP) {						//adjusting mark by knob rotation
+			if (lcd_encoder_steps()){
 				delay_keep_alive(50);
 				//previous_millis_cmd = _millis();
-				lcd_encoder += (lcd_encoder_diff / ENCODER_PULSES_PER_STEP);
+				lcd_encoder += lcd_encoder_steps();
 				lcd_encoder_diff = 0;
 				if (!planner_queue_full()) {
 					current_position[E_AXIS] += float(abs((int)lcd_encoder)) * 0.01; //0.05
@@ -7414,12 +7346,12 @@ void lcd_sdcard_menu()
     //_delay(100);
     return; // nothing to do (so don't thrash the SD card)
   uint16_t fileCnt = card.getnrfilenames();
-
+  card.getWorkDirName();
+  bool slashflag = card.filename[0] == '/';
 
   MENU_BEGIN();
   MENU_ITEM_BACK_P(_T(bMain?MSG_MAIN:MSG_BACK));  // i.e. default menu-item / menu-item after card insertion
-  card.getWorkDirName();
-  if (card.filename[0] == '/')
+  if (slashflag)
   {
 #if SDCARDDETECT == -1
     MENU_ITEM_FUNCTION_P(_T(MSG_REFRESH), lcd_sd_refresh);
@@ -7427,36 +7359,25 @@ void lcd_sdcard_menu()
   } else {
     MENU_ITEM_FUNCTION_P(PSTR(LCD_STR_FOLDER ".."), lcd_sd_updir);
   }
-
-  for (uint16_t i = 0; i < fileCnt; i++)
-  {
-    if (menu_item == menu_line)
-    {
-		const uint16_t nr = ((sdSort == SD_SORT_NONE) || farm_mode || (sdSort == SD_SORT_TIME)) ? (fileCnt - 1 - i) : i;
-		/*#ifdef SDCARD_RATHERRECENTFIRST
-			#ifndef SDCARD_SORT_ALPHA
-				fileCnt - 1 -
-			#endif
-		#endif
-		i;*/
-		#ifdef SDCARD_SORT_ALPHA
-			if (sdSort == SD_SORT_NONE) card.getfilename(nr);
-			else card.getfilename_sorted(nr);
-		#else
-			 card.getfilename(nr);
-		#endif
-			
-                         if (card.filenameIsDir) {
-                           MENU_ITEM_SDDIR(card.filename, card.longFilename);
-                         }
-                         else
-                           {
-                             MENU_ITEM_SDFILE(_T(MSG_CARD_MENU), card.filename, card.longFilename);
-                           }
-    } else {
-      MENU_ITEM_DUMMY();
-    }
+  uint16_t pre_items = menu_item;
+  int16_t i = menu_line-pre_items;
+  menu_item = menu_line;
+  if (i>=0) {
+    const uint16_t nr = ((sdSort == SD_SORT_NONE) || farm_mode || (sdSort == SD_SORT_TIME)) ? (fileCnt - 1 - i) : i;
+#ifdef SDCARD_SORT_ALPHA
+    if (sdSort == SD_SORT_NONE)
+    card.getfilename(nr);
+    else
+      card.getfilename_sorted(nr);
+#else
+    card.getfilename(nr);
+#endif
+    if (card.filenameIsDir)
+      menu_item_sddir(card.filename, card.longFilename);
+    else
+      menu_item_sdfile(card.filename, card.longFilename);
   }
+  menu_item = fileCnt+pre_items;
   MENU_END();
 }
 
@@ -8634,14 +8555,13 @@ static bool check_file(const char* filename) {
 static void menu_action_sdfile(const char* filename)
 {
   loading_flag = false;
+  const char end[5] = ".gco";
   char cmd[30];
   char* c;
   bool result = true;
   sprintf_P(cmd, PSTR("M23 %s"), filename);
   for (c = &cmd[4]; *c; c++)
     *c = tolower(*c);
-
-  const char end[5] = ".gco";
 
   //we are storing just first 8 characters of 8.3 filename assuming that extension is always ".gco"
   for (uint_least8_t i = 0; i < 8; i++) {
@@ -8658,12 +8578,11 @@ static void menu_action_sdfile(const char* filename)
   uint8_t depth = (uint8_t)card.getWorkDirDepth();
   eeprom_write_byte((uint8_t*)EEPROM_DIR_DEPTH, depth);
 
-  for (uint_least8_t i = 0; i < depth; i++) {
-	  for (uint_least8_t j = 0; j < 8; j++) {
-		  eeprom_write_byte((uint8_t*)EEPROM_DIRS + j + 8 * i, dir_names[i][j]);
-	  }
-  }
-  
+  // every which way of doing this keeps tripping a compiler bug
+  eeprom_write_block(dir_names[0],(uint8_t*)EEPROM_DIRS, 8);
+  eeprom_write_block(dir_names[1],(uint8_t*)EEPROM_DIRS + 16, 8);
+  eeprom_write_block(dir_names[2],(uint8_t*)EEPROM_DIRS + 24, 8);
+
   if (!check_file(filename)) {
 	  result = lcd_show_fullscreen_message_yes_no_and_wait_P(_i("File incomplete. Continue anyway?"), false, false);////MSG_FILE_INCOMPLETE c=20 r=2
 	  lcd_update_enable(true);
@@ -8674,6 +8593,7 @@ static void menu_action_sdfile(const char* filename)
   }
 
   lcd_return_to_status();
+
 }
 
 void menu_action_sddirectory(const char* filename)
@@ -8803,16 +8723,20 @@ void lcd_finishstatus() {
   }
   lcd_status_message[len] = '\0';
   lcd_draw_update = 2;
-  scrollstuff = 0;
+  scrollstuff = 1;
+}
+void lcd_updatestatus(const char* message)
+{
+  if(strncmp(lcd_status_message, message, sizeof(lcd_status_message))){
+    strncpy(lcd_status_message, message, sizeof(lcd_status_message));
+    lcd_finishstatus();
+  }
 }
 void lcd_setstatus(const char* message)
 {
   if (lcd_status_message_level > 0)
     return;
-  if(strncmp(lcd_status_message, message, sizeof(lcd_status_message))){
-    strncpy(lcd_status_message, message, sizeof(lcd_status_message));
-    lcd_finishstatus();
-  }
+  lcd_updatestatus(message);
 }
 void lcd_updatestatuspgm(const char *message){
 	strncpy_P(lcd_status_message, message, sizeof(lcd_status_message));
@@ -8922,67 +8846,66 @@ static inline bool forced_menu_expire()
 void menu_lcd_lcdupdate_func(void)
 {
 #if (SDCARDDETECT > 0)
-	if ((IS_SD_INSERTED != lcd_oldcardstatus))
-	{
-		lcd_draw_update = 2;
-		lcd_oldcardstatus = IS_SD_INSERTED;
-		lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
-		if (lcd_oldcardstatus)
-		{
-			card.initsd();
-               LCD_MESSAGERPGM(_T(WELCOME_MSG));
-               bMain=false;                       // flag (i.e. 'fake parameter') for 'lcd_sdcard_menu()' function
-               menu_submenu(lcd_sdcard_menu);
-			//get_description();
-		}
-		else
-		{
-               if(menu_menu==lcd_sdcard_menu)
-                    menu_back();
-			card.release();
-			LCD_MESSAGERPGM(_i("Card removed"));////MSG_SD_REMOVED
-		}
-	}
+  if ((IS_SD_INSERTED != lcd_oldcardstatus))
+    {
+      lcd_draw_update = 2;
+      lcd_oldcardstatus = IS_SD_INSERTED;
+      lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
+      if (lcd_oldcardstatus)
+        {
+          card.initsd();
+          LCD_MESSAGERPGM(_T(WELCOME_MSG));
+          bMain=false;                       // flag (i.e. 'fake parameter') for 'lcd_sdcard_menu()' function
+          menu_submenu(lcd_sdcard_menu);
+          //get_description();
+        }
+      else
+        {
+          if(menu_menu==lcd_sdcard_menu)
+            menu_back();
+          card.release();
+          LCD_MESSAGERPGM(_i("Card removed"));////MSG_SD_REMOVED
+        }
+    }
 #endif//CARDINSERTED
-	if (lcd_next_update_millis < _millis())
-	{
-		if (abs(lcd_encoder_diff) >= ENCODER_PULSES_PER_STEP)
-		{
-			if (lcd_draw_update == 0)
-			lcd_draw_update = 1;
-			lcd_encoder += lcd_encoder_diff / ENCODER_PULSES_PER_STEP;
-			Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
-			lcd_encoder_diff = 0;
-			lcd_timeoutToStatus.start();
-		}
+    if (lcd_encoder_steps())
+    { // this looks like it's jumping the gun, but it still won't do anything until the next update fires on schedule
+      if (lcd_draw_update == 0) lcd_draw_update = 1;
+      lcd_encoder += lcd_encoder_steps();
+      Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
+      lcd_encoder_diff = 0;
+      lcd_timeoutToStatus.start();
+    }
 
-		if (LCD_CLICKED) lcd_timeoutToStatus.start();
+  if (lcd_next_update_millis <= _millis())
+    {
+      lcd_next_update_millis = _millis() + LCD_UPDATE_INTERVAL;
+      if (LCD_CLICKED) lcd_timeoutToStatus.start();
 
-		(*menu_menu)();
+      (*menu_menu)();
 
-		if (z_menu_expired() || other_menu_expired() || forced_menu_expire())
-		{
-		// Exiting a menu. Let's call the menu function the last time with menu_leaving flag set to true
-		// to give it a chance to save its state.
-		// This is useful for example, when the babystep value has to be written into EEPROM.
-			if (menu_menu != NULL)
-			{
-				menu_leaving = 1;
-				(*menu_menu)();
-				menu_leaving = 0;
-			}
-			lcd_clear();
-			lcd_return_to_status();
-			lcd_draw_update = 2;
-		}
-		if (lcd_draw_update == 2) lcd_clear();
-		if (lcd_draw_update) lcd_draw_update--;
-		lcd_next_update_millis = _millis() + LCD_UPDATE_INTERVAL;
-	}
-	if (!SdFatUtil::test_stack_integrity()) stack_error();
-	lcd_ping(); //check that we have received ping command if we are in farm mode
-	lcd_send_status();
-	if (lcd_commands_type == LcdCommands::Layer1Cal) lcd_commands();
+      if (z_menu_expired() || other_menu_expired() || forced_menu_expire())
+        {
+          // Exiting a menu. Let's call the menu function the last time with menu_leaving flag set to true
+          // to give it a chance to save its state.
+          // This is useful for example, when the babystep value has to be written into EEPROM.
+          if (menu_menu != NULL)
+            {
+              menu_leaving = 1;
+              (*menu_menu)();
+              menu_leaving = 0;
+            }
+          lcd_clear();
+          lcd_return_to_status();
+          lcd_draw_update = 2;
+        }
+      if (lcd_draw_update == 2) lcd_clear();
+      if (lcd_draw_update) lcd_draw_update--;
+    }
+    if (!SdFatUtil::test_stack_integrity()) stack_error();
+    lcd_ping(); //check that we have received ping command if we are in farm mode
+    lcd_send_status();
+    if (lcd_commands_type == LcdCommands::Layer1Cal) lcd_commands();
 }
 
 #ifdef TMC2130

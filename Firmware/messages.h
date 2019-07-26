@@ -138,6 +138,7 @@ extern const char MSG_FANCHECK_EXTRUDER[];
 extern const char MSG_FANCHECK_PRINT[];
 extern const char MSG_PLA_PREHEAT[];
 extern const char MSG_PET_PREHEAT[];
+extern const char MSG_ASA_PREHEAT[];
 extern const char MSG_ABS_PREHEAT[];
 extern const char MSG_HIPS_PREHEAT[];
 extern const char MSG_PP_PREHEAT[];
