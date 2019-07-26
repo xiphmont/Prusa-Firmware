@@ -46,10 +46,6 @@
 #include "first_lay_cal.h"
 
 
-int scrollstuff = 0;
-char longFilenameOLD[LONG_FILENAME_LENGTH];
-
-
 static void lcd_sd_updir();
 static void lcd_mesh_bed_leveling_settings();
 
@@ -94,8 +90,9 @@ static float manual_feedrate[] = MANUAL_FEEDRATE;
 
 /* !Configuration settings */
 
+uint8_t scrollstuff = 0;
 uint8_t lcd_status_message_level;
-char lcd_status_message[LCD_WIDTH + 1] = ""; //////WELCOME!
+char lcd_status_message[LONG_FILENAME_LENGTH] = ""; //////WELCOME!
 unsigned char firstrun = 1;
 
 static uint8_t lay1cal_filament = 0;
@@ -310,58 +307,118 @@ bool bSettings;                                   // flag (i.e. 'fake parameter'
 const char STR_SEPARATOR[] PROGMEM = "------------";
 
 
+static void scroll_message(const char *msg, uint8_t col, uint8_t row)
+{
+  uint8_t w = LCD_WIDTH - col;
+  uint8_t l = strlen(msg);
+  if(l > w){
+    bool inters = false;
+    uint8_t gh = scrollstuff;
+    while ((gh - scrollstuff < w) && !inters) {
+      lcd_set_cursor(gh - scrollstuff + col, row);
+      if (msg[gh] == '\0') {
+        for (gh -= scrollstuff; gh<w; gh++) lcd_print(' ');
+        inters = true;
+      }else{
+        lcd_print(msg[gh]);
+        gh++;
+      }
+    }
+    scrollstuff++;
+    if(inters) scrollstuff = 0;
+  } else {
+    lcd_set_cursor(col, row);
+    lcd_print(msg);
+    while (l++<w) {
+      lcd_print(' ');
+    }
+  }
+}
+
+#if 1
 static void lcd_implementation_drawmenu_sdfile_selected(uint8_t row, char* longFilename)
 {
-    char c;
+    bool noscroll = true;
     int enc_dif = lcd_encoder_diff;
-    uint8_t n = LCD_WIDTH - 1;
-    for(uint_least8_t g = 0; g<4;g++){
-      lcd_set_cursor(0, g);
-    lcd_print(' ');
+    int i;
+    for(i = 0; i<4; i++){
+      lcd_set_cursor(0, i);
+      lcd_print(' ');
     }
 
     lcd_set_cursor(0, row);
     lcd_print('>');
-    int i = 1;
-    int j = 0;
-    char* longFilenameTMP = longFilename;
+    scrollstuff = 0;
 
-    while((c = *longFilenameTMP) != '\0')
-    {
-        lcd_set_cursor(i, row);
-        lcd_print(c);
-        i++;
-        longFilenameTMP++;
-        if(i==LCD_WIDTH){
-          i=1;
-          j++;
-          longFilenameTMP = longFilename + j;          
-          n = LCD_WIDTH - 1;
-          for(int g = 0; g<300 ;g++){
-			  manage_heater();
-            if(LCD_CLICKED || ( enc_dif != lcd_encoder_diff )){
-				longFilenameTMP = longFilename;
-				*(longFilenameTMP + LCD_WIDTH - 2) = '\0';
-				i = 1;
-				j = 0;
-				break;
-            }else{
-				if (j == 1) _delay_ms(3);	//wait around 1.2 s to start scrolling text
-				_delay_ms(1);				//then scroll with redrawing every 300 ms 
-            }
-
-          }
+    do {
+      scroll_message(longFilename, 1, row);
+      for(i = 0; i<300; i++){
+        manage_heater();
+        if(LCD_CLICKED || ( enc_dif != lcd_encoder_diff )){
+          scrollstuff = 0;
+          break;
+        }else{
+          if (noscroll) _delay_ms(3);	//wait around 1.2 s to start scrolling text
+          _delay_ms(1);			//then scroll with redrawing every 300 ms
         }
-    }
-    if(c!='\0'){
-      lcd_set_cursor(i, row);
-        lcd_print(c);
-        i++;
-    }
-    n=n-i+1;
-    while(n--)
-        lcd_print(' ');
+      }
+      noscroll = false;
+    } while (scrollstuff);
 }
+#else
+
+static void lcd_implementation_drawmenu_sdfile_selected(uint8_t row, char* longFilename)
+{
+  char c;
+  int enc_dif = lcd_encoder_diff;
+  uint8_t n = LCD_WIDTH - 1;
+     for(uint_least8_t g = 0; g<4;g++){
+       lcd_set_cursor(0, g);
+       lcd_print(' ');
+     }
+     lcd_set_cursor(0, row);
+     lcd_print('>');
+     int i = 1;
+     int j = 0;
+     char* longFilenameTMP = longFilename;
+
+     while((c = *longFilenameTMP) != '\0')
+       {
+         lcd_set_cursor(i, row);
+         lcd_print(c);
+         i++;
+         longFilenameTMP++;
+         if(i==LCD_WIDTH){
+           i=1;
+           j++;
+           longFilenameTMP = longFilename + j;          
+           n = LCD_WIDTH - 1;
+           for(int g = 0; g<300 ;g++){
+             manage_heater();
+             if(LCD_CLICKED || ( enc_dif != lcd_encoder_diff )){
+               longFilenameTMP = longFilename;
+               *(longFilenameTMP + LCD_WIDTH - 2) = '\0';
+               i = 1;
+               j = 0;
+               break;
+             }else{
+               if (j == 1) _delay_ms(3);       //wait around 1.2 s to start scrolling text
+               _delay_ms(1);                           //then scroll with redrawing every 300 ms 
+             }
+           }
+         }
+    }
+     if(c!='\0'){
+       lcd_set_cursor(i, row);
+       lcd_print(c);
+       i++;
+     }
+     n=n-i+1;
+     while(n--)
+       lcd_print(' ');
+}
+#endif
+
 static void lcd_implementation_drawmenu_sdfile(uint8_t row, const char* filename, char* longFilename)
 {
     char c;
@@ -486,11 +543,7 @@ uint8_t menu_item_sddir(const char* str_fn, char* str_fnl)
 #endif //NEW_SD_MENU
 }
 
-static uint8_t menu_item_sdfile(const char*
-#ifdef NEW_SD_MENU
-        str
-#endif //NEW_SD_MENU
-         ,const char* str_fn, char* str_fnl)
+static uint8_t menu_item_sdfile(const char* str ,const char* str_fn, char* str_fnl)
 {
 #ifdef NEW_SD_MENU
 //	printf_P(PSTR("menu sdfile\n"));
@@ -532,13 +585,14 @@ static uint8_t menu_item_sdfile(const char*
 	menu_item++;
 	return 0;
 #else //NEW_SD_MENU
+        (void)str;
 	if (menu_item == menu_line)
 	{
 		if (lcd_draw_update)
 		{
-			if (lcd_encoder == menu_item)
-				lcd_implementation_drawmenu_sdfile_selected(menu_row, str_fnl);
-			else
+                  if (lcd_encoder == menu_item){
+                          //lcd_implementation_drawmenu_sdfile_selected(menu_row, str_fnl);
+                  }else
 				lcd_implementation_drawmenu_sdfile(menu_row, str_fn, str_fnl);
 		}
 		if (menu_clicked && (lcd_encoder == menu_item))
@@ -633,7 +687,8 @@ void lcdui_print_extruder(void)
 // Print farm number (5 chars total)
 void lcdui_print_farm(void)
 {
-	int chars = lcd_printf_P(_N(" F0  "));
+        //int chars =
+        lcd_printf_P(_N(" F0  "));
 //	lcd_space(5 - chars);
 /*
 	// Farm number display
@@ -712,14 +767,9 @@ void lcdui_print_time(void)
 //Print status line on status screen
 void lcdui_print_status_line(void)
 {
-	if (IS_SD_PRINTING)
+	if (IS_SD_PRINTING && (custom_message_type == CustomMsg::Status))
 	{
-		if (strcmp(longFilenameOLD, card.longFilename) != 0)
-		{
-			memset(longFilenameOLD, '\0', strlen(longFilenameOLD));
-			sprintf_P(longFilenameOLD, PSTR("%s"), card.longFilename);
-			scrollstuff = 0;
-		}
+          lcd_setstatus(card.longFilename);
 	}
 
 	if (heating_status)
@@ -763,44 +813,16 @@ void lcdui_print_status_line(void)
 			break;
 		}
 	}
-	else if ((IS_SD_PRINTING) && (custom_message_type == CustomMsg::Status))
-	{ // If printing from SD, show what we are printing
-		if(strlen(card.longFilename) > LCD_WIDTH)
-		{
-			int inters = 0;
-			int gh = scrollstuff;
-			while (((gh - scrollstuff) < LCD_WIDTH) && (inters == 0))
-			{
-				if (card.longFilename[gh] == '\0')
-				{
-					lcd_set_cursor(gh - scrollstuff, 3);
-					lcd_print(card.longFilename[gh - 1]);
-					scrollstuff = 0;
-					gh = scrollstuff;
-					inters = 1;
-				}
-				else
-				{
-					lcd_set_cursor(gh - scrollstuff, 3);
-					lcd_print(card.longFilename[gh - 1]);
-					gh++;
-				}
-			}
-			scrollstuff++;
-		}
-		else
-		{
-			lcd_print(longFilenameOLD);
-		}
-	}
 	else
 	{ // Otherwise check for other special events
    		switch (custom_message_type)
 		{
 		case CustomMsg::Status: // Nothing special, print status message normally
-			lcd_print(lcd_status_message);
+		case CustomMsg::CheckEngine: // Soft alert, more important then SD filename
+		case CustomMsg::FilamentLoading: // If loading filament, print status
+                  scroll_message(lcd_status_message,0,3);
 			break;
-		case CustomMsg::MeshBedLeveling: // If mesh bed leveling in progress, show the status
+                case CustomMsg::MeshBedLeveling: // If mesh bed leveling in progress, show the status
 			if (custom_message_state > 10)
 			{
 				lcd_set_cursor(0, 3);
@@ -827,9 +849,6 @@ void lcdui_print_status_line(void)
 					custom_message_state--;
 				}
 			}
-			break;
-		case CustomMsg::FilamentLoading: // If loading filament, print status
-			lcd_print(lcd_status_message);
 			break;
 		case CustomMsg::PidCal: // PID tuning in progress
 			lcd_print(lcd_status_message);
@@ -863,11 +882,6 @@ void lcdui_print_status_line(void)
 			break;
 		}
 	}
-    
-    // Fill the rest of line to have nice and clean output
-	for(int fillspace = 0; fillspace < 20; fillspace++)
-		if ((lcd_status_message[fillspace] <= 31 ))
-			lcd_print(' ');
 }
 
 //! @brief Show Status Screen
@@ -4267,7 +4281,7 @@ static void prusa_stat_printinfo()
 	SERIAL_ECHO("][FEM:");
 	SERIAL_ECHO(itostr3(feedmultiply));
 	SERIAL_ECHO("][FNM:");
-	SERIAL_ECHO(longFilenameOLD);
+	SERIAL_ECHO(card.longFilename);
 	SERIAL_ECHO("][TIM:");
 	if (starttime != 0)
 	{
@@ -5915,6 +5929,9 @@ static void lcd_calibration_menu()
     }
 	MENU_ITEM_GCODE_P(_T(MSG_AUTO_HOME), PSTR("G28 W"));
 	MENU_ITEM_FUNCTION_P(_i("Selftest         "), lcd_selftest_v);////MSG_SELFTEST
+        if(mmux_features){
+          MENU_ITEM_SUBMENU_P(_i("Calibrate MMU"), lcd_mmux_calibration_menu);
+        }
 #ifdef MK1BP
     // MK1
     // "Calibrate Z"
@@ -5946,9 +5963,6 @@ static void lcd_calibration_menu()
 #ifndef MK1BP
 	MENU_ITEM_SUBMENU_P(_i("Temp. calibration"), lcd_pinda_calibration_menu);////MSG_CALIBRATION_PINDA_MENU c=17 r=1
 #endif //MK1BP
-        if(mmux_features){
-          MENU_ITEM_SUBMENU_P(_i("MMU calibration"), lcd_mmux_calibration_menu);
-        }
   }
   
   MENU_END();
@@ -6340,8 +6354,8 @@ static void fil_load_menu()
     MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 4, extr_adj, 3); ////MSG_LOAD_FILAMENT_4 c=17
     if (mmu_enabled)
     {
-        for (int i=5; i < mmu_extruders; i++)
-            MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i, extr_adj, i-1);
+        for (int i=4; i < mmu_extruders; i++)
+            MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i+1, extr_adj, i);
     }
     MENU_END();
 }
@@ -6358,8 +6372,8 @@ static void mmu_load_to_nozzle_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), 4, lcd_mmu_load_to_nozzle, 3);
         if (mmu_enabled)
         {
-             for (int i=5; i < mmu_extruders; i++)
-                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i, lcd_mmu_load_to_nozzle, i-1);
+             for (int i=4; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_LOAD_FILAMENT), i+1, lcd_mmu_load_to_nozzle, i);
         }
         MENU_END();
     }
@@ -6388,8 +6402,8 @@ static void mmu_fil_eject_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), 4, mmu_eject_filament, 3);
         if (mmu_enabled)
         {
-             for (int i=5; i < mmu_extruders; i++)
-                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i, mmu_eject_filament, i-1);
+             for (int i=4; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i+1, mmu_eject_filament, i);
         }
         MENU_END();
     }
@@ -6415,8 +6429,8 @@ static void mmu_cut_filament_menu()
         MENU_ITEM_FUNCTION_NR_P(_T(MSG_CUT_FILAMENT), 5, mmu_cut_filament, 4);
         if (mmu_enabled)
         {
-             for (int i=5; i < mmu_extruders; i++)
-                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i, mmu_eject_filament, i-1);
+             for (int i=4; i < mmu_extruders; i++)
+                 MENU_ITEM_FUNCTION_NR_P(_T(MSG_EJECT_FILAMENT), i+1, mmu_eject_filament, i);
         }
         MENU_END();
     }
@@ -7432,10 +7446,13 @@ void lcd_sdcard_menu()
 			 card.getfilename(nr);
 		#endif
 			
-		if (card.filenameIsDir)
-			MENU_ITEM_SDDIR(card.filename, card.longFilename);
-		else
-			MENU_ITEM_SDFILE(_T(MSG_CARD_MENU), card.filename, card.longFilename);
+                         if (card.filenameIsDir) {
+                           MENU_ITEM_SDDIR(card.filename, card.longFilename);
+                         }
+                         else
+                           {
+                             MENU_ITEM_SDFILE(_T(MSG_CARD_MENU), card.filename, card.longFilename);
+                           }
     } else {
       MENU_ITEM_DUMMY();
     }
@@ -8609,8 +8626,7 @@ static bool check_file(const char* filename) {
 		
 	}
 	card.printingHasFinished();
-	strncpy_P(lcd_status_message, _T(WELCOME_MSG), LCD_WIDTH);
-	lcd_finishstatus();
+        lcd_updatestatuspgm(_T(WELCOME_MSG));
 	return result;
 	
 }
@@ -8785,20 +8801,22 @@ void lcd_finishstatus() {
       lcd_status_message[len++] = ' ';
     }
   }
-  lcd_status_message[LCD_WIDTH] = '\0';
+  lcd_status_message[len] = '\0';
   lcd_draw_update = 2;
-
+  scrollstuff = 0;
 }
 void lcd_setstatus(const char* message)
 {
   if (lcd_status_message_level > 0)
     return;
-  strncpy(lcd_status_message, message, LCD_WIDTH);
-  lcd_finishstatus();
+  if(strncmp(lcd_status_message, message, sizeof(lcd_status_message))){
+    strncpy(lcd_status_message, message, sizeof(lcd_status_message));
+    lcd_finishstatus();
+  }
 }
 void lcd_updatestatuspgm(const char *message){
-	strncpy_P(lcd_status_message, message, LCD_WIDTH);
-	lcd_status_message[LCD_WIDTH] = 0;
+	strncpy_P(lcd_status_message, message, sizeof(lcd_status_message));
+	lcd_status_message[sizeof(lcd_status_message)-1] = 0;
 	lcd_finishstatus();
 	// hack lcd_draw_update to 1, i.e. without clear
 	lcd_draw_update = 1;

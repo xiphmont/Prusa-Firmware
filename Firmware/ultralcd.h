@@ -108,6 +108,7 @@ extern int8_t FSensorStateMenu;
 enum class CustomMsg : uint_least8_t
 {
 	Status,          //!< status message from lcd_status_message variable
+        CheckEngine,     //!< canned soft alert that something _may_ need attention
 	MeshBedLeveling, //!< Mesh bed leveling in progress
 	FilamentLoading, //!< Loading filament in progress
 	PidCal,          //!< PID tuning in progress

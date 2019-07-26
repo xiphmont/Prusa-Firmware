@@ -104,6 +104,7 @@ extern const char MSG_WIZARD_QUIT[];
 extern const char MSG_YES[];
 extern const char MSG_V2_CALIBRATION[];
 extern const char WELCOME_MSG[];
+
 //not internationalized messages
 extern const char MSG_BROWNOUT_RESET[];
 extern const char MSG_EXTERNAL_RESET[];
@@ -135,6 +136,12 @@ extern const char MSG_OCTOPRINT_RESUMED[];
 extern const char MSG_OCTOPRINT_CANCEL[];
 extern const char MSG_FANCHECK_EXTRUDER[];
 extern const char MSG_FANCHECK_PRINT[];
+extern const char MSG_PLA_PREHEAT[];
+extern const char MSG_PET_PREHEAT[];
+extern const char MSG_ABS_PREHEAT[];
+extern const char MSG_HIPS_PREHEAT[];
+extern const char MSG_PP_PREHEAT[];
+extern const char MSG_FLEX_PREHEAT[];
 
 #if defined(__cplusplus)
 }

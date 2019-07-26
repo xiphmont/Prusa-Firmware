@@ -55,7 +55,16 @@ namespace
 
 bool mmu_enabled = false;
 bool mmu_ready = false;
-bool mmu_fil_loaded = false; //if true: blocks execution of duplicit T-codes
+bool mmu_fil_loaded = false; //if true: blocks execution of duplicate T-codes
+bool mmu_fil_extruder_loaded = false; //if true: we note and report if the extruder filament sensor gets unexpected 'not loaded' readings
+bool mmu_fil_extruder_unloaded = false; //if true: we note and report if the extruder filameet sensor gets unexpected 'loaded' readings
+
+// Note that mmu_fil_extruder_loaded and mmu_fil_extruder_unloaded can
+// both be false.  But when one is true it means that a disagreeing
+// reading from the sensor is violating our assumed state invariants
+// and must be reported.
+bool mmu_fil_extruder_sensor_spurious_empty = false; // true if we see the filament sensor spuriously read incorrectly
+bool mmu_fil_extruder_sensor_spurious_loaded = false; // true if we see the filament sensor spuriously read incorrectly
 
 static S mmu_state = S::Disabled;
 
@@ -63,7 +72,7 @@ MmuCmd mmu_cmd = MmuCmd::None;
 
 //idler ir sensor
 static uint8_t mmu_idl_sens = 0;
-bool ir_sensor_detected = false; 
+bool ir_sensor_detected = false;
 static bool mmu_loading_flag = false; //when set to true, we assume that mmu2 unload was finished and loading phase is now performed; printer can send 'A' to mmu2 to abort loading process
 
 uint8_t mmu_extruder = MMU_FILAMENT_UNKNOWN;
@@ -85,6 +94,9 @@ uint32_t mmu_last_response = 0;
 MmuCmd mmu_last_cmd = MmuCmd::None;
 uint16_t mmu_power_failures = 0;
 
+
+#define MMU_DEBUG
+//#define MMU_DEBUG_FINDA
 
 #ifdef MMU_DEBUG
 static const auto DEBUG_PUTCHAR = putchar;
@@ -199,7 +211,16 @@ static bool activate_stealth_mode()
 #endif
 }
 
-
+static void clear_sensor_watchdog(){
+  if (custom_message_type == CustomMsg::CheckEngine){
+    lcd_setstatuspgm(_T(WELCOME_MSG));
+    custom_message_type = CustomMsg::Status;
+  }
+  mmu_fil_extruder_loaded = false;
+  mmu_fil_extruder_unloaded = false;
+  mmu_fil_extruder_sensor_spurious_empty = false;
+  mmu_fil_extruder_sensor_spurious_loaded = false;
+}
 
 //mmu main loop - state machine processing
 void mmu_loop(void)
@@ -271,7 +292,7 @@ void mmu_loop(void)
 		{
 			fscanf_P(uart2io, PSTR("%hhu"), &mmu_finda); //scan finda from buffer
 			FDEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), mmu_finda);
-			FDEBUG_PUTS_P(PSTR("MMU <= 'G0'"));
+			DEBUG_PUTS_P(PSTR("MMU <= 'G0'"));
                         mmu_puts_P(PSTR("G0\n")); //send 'read # extruders' request
 			mmu_state = S::GetExtruders;
 		}
@@ -302,18 +323,20 @@ void mmu_loop(void)
 	case S::Idle:
 		if (mmu_cmd != MmuCmd::None) //command request ?
 		{
-			if ((mmu_cmd >= MmuCmd::T0) && (mmu_cmd <= MmuCmd::T7))
+			if ((mmu_cmd >= MmuCmd::T0) && (mmu_cmd <= MmuCmd::T9))
 			{
 				const uint8_t filament = mmu_cmd - MmuCmd::T0;
+                                clear_sensor_watchdog();
 				DEBUG_PRINTF_P(PSTR("MMU <= 'T%d'\n"), filament);
 				mmu_printf_P(PSTR("T%d\n"), filament);
 				mmu_state = S::WaitCmd; // wait for response
 				mmu_fil_loaded = true;
 				mmu_idl_sens = 1;
-			}
-			else if ((mmu_cmd >= MmuCmd::L0) && (mmu_cmd <= MmuCmd::L7))
+                        }
+			else if ((mmu_cmd >= MmuCmd::L0) && (mmu_cmd <= MmuCmd::L9))
 			{
 			    const uint8_t filament = mmu_cmd - MmuCmd::L0;
+                            clear_sensor_watchdog();
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'L%d'\n"), filament);
 			    mmu_printf_P(PSTR("L%d\n"), filament);
 			    mmu_state = S::WaitCmd; // wait for response
@@ -327,22 +350,25 @@ void mmu_loop(void)
 			}
 			else if (mmu_cmd == MmuCmd::U0)
 			{
+                                clear_sensor_watchdog();
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'U0'\n"));
 				mmu_puts_P(PSTR("U0\n")); //send 'unload current filament'
 				mmu_fil_loaded = false;
 				mmu_state = S::WaitCmd;
 			}
-			else if ((mmu_cmd >= MmuCmd::E0) && (mmu_cmd <= MmuCmd::E7))
+			else if ((mmu_cmd >= MmuCmd::E0) && (mmu_cmd <= MmuCmd::E9))
 			{
 			    const uint8_t filament = mmu_cmd - MmuCmd::E0;
+                                clear_sensor_watchdog();
 				DEBUG_PRINTF_P(PSTR("MMU <= 'E%d'\n"), filament);
 				mmu_printf_P(PSTR("E%d\n"), filament); //send eject filament
 				mmu_fil_loaded = false;
 				mmu_state = S::WaitCmd;
 			}
-			else if ((mmu_cmd >= MmuCmd::K0) && (mmu_cmd <= MmuCmd::K7))
+			else if ((mmu_cmd >= MmuCmd::K0) && (mmu_cmd <= MmuCmd::K9))
                         {
                             const uint8_t filament = mmu_cmd - MmuCmd::K0;
+                            clear_sensor_watchdog();
                             DEBUG_PRINTF_P(PSTR("MMU <= 'K%d'\n"), filament);
                             mmu_printf_P(PSTR("K%d\n"), filament); //send eject filament
                             mmu_fil_loaded = false;
@@ -350,18 +376,21 @@ void mmu_loop(void)
                         }
 			else if (mmu_cmd == MmuCmd::R0)
 			{
+                          clear_sensor_watchdog();
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'R0'\n"));
 				mmu_puts_P(PSTR("R0\n")); //send recover after eject
 				mmu_state = S::WaitCmd;
 			}
 			else if (mmu_cmd == MmuCmd::S3)
 			{
+                          clear_sensor_watchdog();
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'S3'\n"));
 				mmu_puts_P(PSTR("S3\n")); //send power failures request
 				mmu_state = S::GetDrvError;
 			}
 			else if (mmu_cmd == MmuCmd::W0)
 			{
+                          clear_sensor_watchdog();
 			    DEBUG_PRINTF_P(PSTR("MMU <= 'W0'\n"));
 			    mmu_puts_P(PSTR("W0\n"));
 			    mmu_state = S::Pause;
@@ -377,16 +406,32 @@ void mmu_loop(void)
 		else if ((mmu_last_response + 300) < _millis()) //status update request every 300ms
 		{
 #ifndef IR_SENSOR
-			if(check_for_ir_sensor()) ir_sensor_detected = true;
+			if (check_for_ir_sensor()) ir_sensor_detected = true;
 #endif //IR_SENSOR not defined
+                        if (mmu_fil_extruder_loaded && (PIN_GET(IR_SENSOR_PIN) != 0)) mmu_fil_extruder_sensor_spurious_empty = true;
+                        if (mmu_fil_extruder_unloaded && (PIN_GET(IR_SENSOR_PIN) == 0)) mmu_fil_extruder_sensor_spurious_loaded = true;
+                        if (mmu_fil_extruder_sensor_spurious_empty){
+                          if (mmu_fil_extruder_sensor_spurious_loaded){
+                             lcd_setstatuspgm(_i("IR sens malfunction"));
+                             custom_message_type = CustomMsg::CheckEngine;
+                          }else{
+                            lcd_setstatuspgm(_i("IR sensor ON marginal"));
+                            custom_message_type = CustomMsg::CheckEngine;
+                          }
+                        } else {
+                          if (mmu_fil_extruder_sensor_spurious_loaded){
+                            lcd_setstatuspgm(_i("IR sensor OFF marginal"));
+                            custom_message_type = CustomMsg::CheckEngine;
+                          }
+                        }
                         if(mmux_features){
-                                FDEBUG_PUTS_P(PSTR("MMU <= 'G1'"));
-                                mmu_puts_P(PSTR("G1\n")); //send 'read active filament' request
-                                mmu_state = S::GetFilament;
+                          FDEBUG_PUTS_P(PSTR("MMU <= 'G1'"));
+                          mmu_puts_P(PSTR("G1\n")); //send 'read active filament' request
+                          mmu_state = S::GetFilament;
                         }else{
-                                FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
-                                mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
-                                mmu_state = S::GetFinda;
+                          FDEBUG_PUTS_P(PSTR("MMU <= 'P0'"));
+                          mmu_puts_P(PSTR("P0\n")); //send 'read finda' request
+                          mmu_state = S::GetFinda;
                         }
                 }
                 return;
@@ -395,7 +440,7 @@ void mmu_loop(void)
 		{
                   int tmp;
                   fscanf_P(uart2io, PSTR("%u"), &tmp);
-                  DEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), tmp);
+                  FDEBUG_PRINTF_P(PSTR("MMU => '%dok'\n"), tmp);
                   if (tmp >= 0 && tmp < (int)mmu_extruders)
                     mmu_extruder = tmp_extruder = tmp;
                   else
@@ -410,9 +455,7 @@ void mmu_loop(void)
                 {
                     if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
                     {
-#ifdef MMU_DEBUG
-                      printf_P(PSTR("MMU <= 'A'\n"));
-#endif //MMU_DEBUG
+                      DEBUG_PUTS_P(PSTR("MMU <= 'A'"));
                       mmu_puts_P(PSTR("A\n")); //send 'abort' request
                       mmu_idl_sens = 0;
                       //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
@@ -437,7 +480,7 @@ void mmu_loop(void)
 				{
 				    enquecommand_front_P(PSTR("M600")); //save print and run M600 command
 				}
-			}
+			} 
 			mmu_state = S::Idle;
 			if (mmu_cmd == MmuCmd::None)
 				mmu_ready = true;
@@ -452,7 +495,7 @@ void mmu_loop(void)
                 {
                     if (PIN_GET(IR_SENSOR_PIN) == 0 && mmu_loading_flag)
                     {
-                      DEBUG_PRINTF_P(PSTR("MMU <= 'A'\n"));
+                      DEBUG_PUTS_P(PSTR("MMU <= 'A'"));
                       mmu_puts_P(PSTR("A\n")); //send 'abort' request
                       mmu_idl_sens = 0;
                       //printf_P(PSTR("MMU IDLER_SENSOR = 0 - ABORT\n"));
@@ -541,6 +584,7 @@ void mmu_reset(void)
 	_delay_us(100);
 	digitalWrite(MMU_RST_PIN, HIGH);
 #else                                          //SW - send X0 command
+        DEBUG_PUTS_P(PSTR("MMU <= X0"));
     mmu_puts_P(PSTR("X0\n"));
 #endif
     cached_idler_offset = -1;
@@ -613,7 +657,7 @@ int8_t mmu_set_filament_type(uint8_t extruder, uint8_t filament)
 //! If T or L command is enqueued, it marks filament loaded in AutoDeplete module.
 void mmu_command(MmuCmd cmd)
 {
-	if ((cmd >= MmuCmd::T0) && (cmd <= MmuCmd::T7))
+	if ((cmd >= MmuCmd::T0) && (cmd <= MmuCmd::T9))
 	{
 		//disable extruder motor
 #ifdef TMC2130
@@ -622,7 +666,7 @@ void mmu_command(MmuCmd cmd)
 		//printf_P(PSTR("E-axis disabled\n"));
 		ad_markLoaded(cmd - MmuCmd::T0);
 	}
-    if ((cmd >= MmuCmd::L0) && (cmd <= MmuCmd::L7))
+    if ((cmd >= MmuCmd::L0) && (cmd <= MmuCmd::L9))
     {
         ad_markLoaded(cmd - MmuCmd::L0);
     }
@@ -677,12 +721,11 @@ static void get_response_print_info(uint8_t move) {
 bool mmu_get_response(uint8_t move)
 {
 
-	get_response_print_info(move);
-	KEEPALIVE_STATE(IN_PROCESS);
-	while (mmu_cmd != MmuCmd::None)
-	{
-		delay_keep_alive(100);
-	}
+  get_response_print_info(move);
+  KEEPALIVE_STATE(IN_PROCESS);
+  while (mmu_cmd != MmuCmd::None){
+    delay_keep_alive(100);
+  }
 
 	while (!mmu_ready)
 	{
@@ -712,6 +755,7 @@ bool mmu_get_response(uint8_t move)
 					printf_P(PSTR("Unloading finished 1\n"));
 					disable_e0(); //turn off E-stepper to prevent overheating and alow filament pull-out if necessary
 					move = MMU_NO_MOVE;
+                                        mmu_fil_extruder_unloaded = true;
 				}
 				break;
 			case MMU_TCODE_MOVE: //first do unload and then continue with infinite loading movements
@@ -777,6 +821,7 @@ void manage_response(bool move_axes, bool turn_off_nozzle, uint8_t move)
 	{
 		  response = mmu_get_response(move); //wait for "ok" from mmu
 		  if (!response) { //no "ok" was received in reserved time frame, user will fix the issue on mmu unit
+                          clear_sensor_watchdog();
 			  if (!mmu_print_saved) { //first occurence, we are saving current position, park print head in certain position and disable nozzle heater
 				  
 				  uint8_t mmu_fail = eeprom_read_byte((uint8_t*)EEPROM_MMU_FAIL);
@@ -847,6 +892,7 @@ void manage_response(bool move_axes, bool turn_off_nozzle, uint8_t move)
 			  }
 		  }
 		  else if (mmu_print_saved) {
+                          clear_sensor_watchdog();
 			  printf_P(PSTR("MMU starts responding\n"));
 			  KEEPALIVE_STATE(IN_HANDLER);
 			  mmu_loading_flag = false;
@@ -895,7 +941,7 @@ void manage_response(bool move_axes, bool turn_off_nozzle, uint8_t move)
 void mmu_load_to_nozzle()
 {
 	st_synchronize();
-	
+
 	bool saved_e_relative_mode = axis_relative_modes[E_AXIS];
 	if (!saved_e_relative_mode) axis_relative_modes[E_AXIS] = true;
 	if (ir_sensor_detected)
@@ -922,6 +968,7 @@ void mmu_load_to_nozzle()
 	plan_buffer_line_curposXYZE(feedrate / 60, active_extruder);
     st_synchronize();
 	if (!saved_e_relative_mode) axis_relative_modes[E_AXIS] = false;
+        mmu_fil_extruder_loaded = true;
 }
 
 void mmu_M600_wait_and_beep(bool saved_printing) {
@@ -1082,7 +1129,7 @@ void extr_adj(uint8_t extruder) //loading filament for SNMM
 {
 #ifndef SNMM
     MmuCmd cmd = MmuCmd::L0 + extruder;
-    if (extruder > (MmuCmd::L7 - MmuCmd::L0))
+    if (extruder > (MmuCmd::L9 - MmuCmd::L0))
     {
         printf_P(PSTR("Filament out of range %d \n"),extruder);
         return;
@@ -1209,7 +1256,7 @@ void extr_unload()
 		mmu_command(MmuCmd::U0);
 		// get response
 		manage_response(false, true, MMU_UNLOAD_MOVE);
-
+                mmu_fil_extruder_unloaded = true;
         menu_back();
 #else //SNMM
 
@@ -1271,6 +1318,8 @@ void extr_unload()
 }
 
 //wrapper functions for loading filament
+// dead code
+#if 0
 void extr_adj_0()
 {
 #ifndef SNMM
@@ -1320,11 +1369,13 @@ void extr_adj_4()
 	extr_adj(4);
 #endif
 }
+#endif
 
 void load_all()
 {
 #ifndef SNMM
-	enquecommand_P(PSTR("M701 E0"));
+        clear_sensor_watchdog();
+        enquecommand_P(PSTR("M701 E0"));
 	enquecommand_P(PSTR("M701 E1"));
 	enquecommand_P(PSTR("M701 E2"));
 	enquecommand_P(PSTR("M701 E3"));
@@ -1348,6 +1399,7 @@ void load_all()
 #endif
 }
 
+#ifdef SNMM
 //wrapper functions for changing extruders
 void extr_change_0()
 {
@@ -1373,7 +1425,6 @@ void extr_change_3()
 	lcd_return_to_status();
 }
 
-#ifdef SNMM
 //wrapper functions for unloading filament
 void extr_unload_all()
 {
@@ -1554,43 +1605,89 @@ bFilamentAction=false;                            // NOT in "mmu_fil_eject_menu(
 //! being detected by the pulley IR sensor.
 //! @retval true Fits
 //! @retval false Doesn't fit
+
+// Notes: This check can cause all sorts of real-world headaches, so
+// be verbose.
+
+// A marginally aligned IR sensor may sense the tip (widened after
+// previous use and retraction/unload), but fail or occasionally fail
+// to trigger on the rest of a filament, especially a filament that's
+// been smooshed a little by passes through multiple hobbed pulleys.
+
+// Because the tip successfully triggered the sensor, we made it here
+// to the jam test.  However, triggering on the head, then failing to
+// trigger reliably on the filament past the head will cause us to
+// count too few total 'filament sensed' steps, even if we
+// successfully see the tip pass by again.  Then the code will [well,
+// previosuly would] either keep trying to feed filament and make a
+// giant puck of plastic, or reject the load and assume an extruder
+// jam when the real problem is a combination of a misaligned IR
+// sensor and possibly damaged filament.
+
+// We can and should sense this case too, and report it intelligibly
+// to the user.
+
 static bool can_load()
 {
-    current_position[E_AXIS] += 60;
-    plan_buffer_line_curposXYZE(MMU_LOAD_FEEDRATE, active_extruder);
-    current_position[E_AXIS] -= 52;
+  // Do we still see the IR sensor triggered properly as we move the filament around?
+  mmu_fil_extruder_sensor_spurious_empty = false;
+  mmu_fil_extruder_sensor_spurious_loaded = false;
+  // forward 60mm
+  // watch IR sensor; we're going forward so it should stay active.
+  // If the filament jams/grinds, this could explain the sensor going
+  // dark, but even then it indicating unload is a good indication
+  // it's not set to be sensitive enough, and retract will still see
+  // the tip pull back too early.
+  DEBUG_PUTS_P(PSTR("MMU can_load:"));
+  const float e_increment = 0.2;
+  uint16_t isteps = 60.0 / e_increment;
+  for(uint16_t i = 0; i < isteps; ++i) {
+    current_position[E_AXIS] += e_increment;
     plan_buffer_line_curposXYZE(MMU_LOAD_FEEDRATE, active_extruder);
     st_synchronize();
+    if(0 == PIN_GET(IR_SENSOR_PIN)) {
+      // sensor still triggered as it sohuld be
+      DEBUG_PUTCHAR('V');
+    }else{
+      // sensor off!  very worrying!  Continue anyway and try to salvage this.
+      mmu_fil_extruder_sensor_spurious_empty = true;
+      DEBUG_PUTCHAR('v');
+    }
+  }
+  DEBUG_PUTCHAR('\n');
 
-    uint_least8_t filament_detected_count = 0;
-    const float e_increment = 0.2;
-    const uint_least8_t steps = 6.0 / e_increment;
-    DEBUG_PUTS_P(PSTR("MMU can_load:"));
-    for(uint_least8_t i = 0; i < steps; ++i)
-    {
-        current_position[E_AXIS] -= e_increment;
-        plan_buffer_line_curposXYZE(MMU_LOAD_FEEDRATE, active_extruder);
-        st_synchronize();
-        if(0 == PIN_GET(IR_SENSOR_PIN))
-        {
-            ++filament_detected_count;
-            DEBUG_PUTCHAR('O');
-        }
-        else
-        {
-            DEBUG_PUTCHAR('o');
-        }
+  // reverse 58mm.  Watch for tip.
+  DEBUG_PUTS_P(PSTR("MMU can_load:"));
+  uint16_t filament_detected_count = 0;
+  uint16_t filament_last_detected = 0;
+  isteps = 58.0 / e_increment;
+  for(uint16_t i = 0; i < isteps; ++i) {
+    current_position[E_AXIS] -= e_increment;
+    plan_buffer_line_curposXYZE(MMU_LOAD_FEEDRATE, active_extruder);
+    st_synchronize();
+    if(0 == PIN_GET(IR_SENSOR_PIN)) {
+      ++filament_detected_count;
+      filament_last_detected = i;
+      DEBUG_PUTCHAR('O');
+    }else{
+      DEBUG_PUTCHAR('o');
     }
-    if (filament_detected_count > steps - 4)
-    {
-        DEBUG_PUTS_P(PSTR(" succeeded."));
-        return true;
-    }
-    else
-    {
-        DEBUG_PUTS_P(PSTR(" failed."));
-        return false;
-    }
+  }
+
+  if(filament_detected_count != filament_last_detected+1){
+    // these counts should agree!  very worrying!  Continue anyway and try to salvage this.
+    mmu_fil_extruder_sensor_spurious_empty = true;
+  }
+  if (filament_last_detected > isteps - 5) {
+    DEBUG_PUTS_P(PSTR(" succeeded."));
+    return true;
+  } else {
+    // we were watching for the tip to go past, not total sensor
+    // count; at this point, we can be pretty sure we're slipping and
+    // likely jammed.
+    DEBUG_PUTS_P(PSTR(" failed."));
+    return false;
+  }
 }
 
 //! @brief load more
@@ -1649,7 +1746,27 @@ void mmu_continue_loading(bool blocking)
 	}
 
     bool success = load_more();
-    if (success) success = can_load();
+    if (success){
+        success = can_load();
+        if (mmu_fil_extruder_sensor_spurious_empty){
+          lcd_setstatuspgm(_i("IR sensor 'ON' readings appear unreliable"));
+          if (menu_depth>0) { // proxy test for 'triggered from a menu'
+            lcd_set_cursor(0, 2);
+            lcd_puts_P(PSTR("WARN: IR sensor 'ON'"));
+            lcd_set_cursor(0, 3);
+            lcd_puts_P(PSTR("reading unreliable"));
+          }
+          custom_message_type = CustomMsg::CheckEngine;
+        }else if(!success){
+          lcd_setstatuspgm(_i("Load jam, retrying"));
+          DEBUG_PUTS_P(PSTR("Apparent load jam; retrying"));
+          if (menu_depth>0) { // proxy test for 'triggered from a menu'
+            lcd_set_cursor(0, 2);
+            lcd_puts_P(PSTR("Load jam; retrying"));
+          }
+          custom_message_type = CustomMsg::CheckEngine;
+        }
+    }
 
     enum class Ls : uint_least8_t
     {
@@ -1680,7 +1797,18 @@ void mmu_continue_loading(bool blocking)
             mmu_command(MmuCmd::T0 + tmp_extruder);
             manage_response(true, true, MMU_TCODE_MOVE);
             success = load_more();
-            if (success) success = can_load();
+            if (success){
+              success = can_load();
+              if (mmu_fil_extruder_sensor_spurious_empty){
+                lcd_setstatuspgm(_i("IR sensor ON marginal"));
+                DEBUG_PUTS_P(PSTR("IR sensor 'ON' state appears to be marginal; calibration probelm or damaged filament?"));
+                custom_message_type = CustomMsg::CheckEngine;
+              }else if(!success){
+                lcd_setstatuspgm(_i("Load jam, retrying"));
+                DEBUG_PUTS_P(PSTR("Apparent load jam; retrying"));
+                custom_message_type = CustomMsg::Status;
+              }
+            }
             ++retry; // overflow not handled, as it is not dangerous.
             if (retry >= max_retry) state = Ls::Unload;
             break;
@@ -1704,6 +1832,8 @@ void mmu_continue_loading(bool blocking)
 
             setAllTargetHotends(0);
             lcd_setstatuspgm(_i("MMU load failed     "));////c=20 r=1
+            DEBUG_PUTS_P(PSTR("MMU load failed"));
+            custom_message_type = CustomMsg::Status;
 
             if (blocking)
             {
@@ -1721,4 +1851,5 @@ void mmu_continue_loading(bool blocking)
             break;
         }
     }
+    mmu_fil_extruder_loaded = true;
 }
