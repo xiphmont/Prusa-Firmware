@@ -343,7 +343,7 @@ static void scroll_message(const char *msg, uint8_t col, uint8_t row)
     }
     if (!scrollstuff) scrollstuff=1;
   } else {
-    pad_message(msg, 1, row);
+    pad_message(msg, col, row);
     scrollstuff = 0;
     scrollmillis = 0;
   }
@@ -926,9 +926,10 @@ static void lcd_status_screen()
 	else if (feedmultiply > 999)
 		feedmultiply = 999;
 
-	if (lcd_status_update_delay)
+	if (lcd_status_update_delay) {
 		lcd_status_update_delay--;
-        else
+                lcd_draw_update= 0;
+        } else
                 lcd_draw_update= 1;
 
 	if (lcd_draw_update)
