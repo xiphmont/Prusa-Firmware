@@ -409,8 +409,14 @@ void mmu_loop(void)
 #ifndef IR_SENSOR
 			if (check_for_ir_sensor()) ir_sensor_detected = true;
 #endif //IR_SENSOR not defined
-                        if (mmu_fil_extruder_loaded && (PIN_GET(IR_SENSOR_PIN) != 0)) mmu_fil_extruder_sensor_spurious_empty = true;
-                        if (mmu_fil_extruder_unloaded && (PIN_GET(IR_SENSOR_PIN) == 0)) mmu_fil_extruder_sensor_spurious_loaded = true;
+                        if (mmu_fil_extruder_loaded && (PIN_GET(IR_SENSOR_PIN) != 0)){
+                          DEBUG_PUTS_P(PSTR("S::Idle: spurious empty signal"));
+                          mmu_fil_extruder_sensor_spurious_empty = true;
+                        }
+                        if (mmu_fil_extruder_unloaded && (PIN_GET(IR_SENSOR_PIN) == 0)){
+                          mmu_fil_extruder_sensor_spurious_loaded = true;
+                          DEBUG_PUTS_P(PSTR("S::Idle: spurious loaded signal"));
+                        }
                         if (mmu_fil_extruder_sensor_spurious_empty){
                           if (mmu_fil_extruder_sensor_spurious_loaded){
                              lcd_setstatuspgm(PSTR("IR sensor malfunctioning; spurious readings"));
@@ -1641,7 +1647,6 @@ static bool can_load()
   // dark, but even then it indicating unload is a good indication
   // it's not set to be sensitive enough, and retract will still see
   // the tip pull back too early.
-  DEBUG_PUTS_P(PSTR("MMU can_load:"));
   const float e_increment = 0.2;
   uint16_t isteps = 60.0 / e_increment;
   for(uint16_t i = 0; i < isteps; ++i) {
@@ -1650,17 +1655,14 @@ static bool can_load()
     st_synchronize();
     if(0 == PIN_GET(IR_SENSOR_PIN)) {
       // sensor still triggered as it sohuld be
-      DEBUG_PUTCHAR('V');
     }else{
       // sensor off!  very worrying!  Continue anyway and try to salvage this.
       mmu_fil_extruder_sensor_spurious_empty = true;
-      DEBUG_PUTCHAR('v');
+      DEBUG_PUTS_P(PSTR("can_load: suprious empty 1"));
     }
   }
-  DEBUG_PUTCHAR('\n');
 
   // reverse 58mm.  Watch for tip.
-  DEBUG_PUTS_P(PSTR("MMU can_load:"));
   uint16_t filament_detected_count = 0;
   uint16_t filament_last_detected = 0;
   isteps = 58.0 / e_increment;
@@ -1671,24 +1673,23 @@ static bool can_load()
     if(0 == PIN_GET(IR_SENSOR_PIN)) {
       ++filament_detected_count;
       filament_last_detected = i;
-      DEBUG_PUTCHAR('O');
     }else{
-      DEBUG_PUTCHAR('o');
     }
   }
 
   if(filament_detected_count != filament_last_detected+1){
     // these counts should agree!  very worrying!  Continue anyway and try to salvage this.
     mmu_fil_extruder_sensor_spurious_empty = true;
+    DEBUG_PUTS_P(PSTR("can_load: spurious empty 2"));
   }
   if (filament_last_detected > isteps - 5) {
-    DEBUG_PUTS_P(PSTR(" succeeded."));
+    DEBUG_PUTS_P(PSTR("MMU can_load succeeded."));
     return true;
   } else {
     // we were watching for the tip to go past, not total sensor
     // count; at this point, we can be pretty sure we're slipping and
     // likely jammed.
-    DEBUG_PUTS_P(PSTR(" failed."));
+    DEBUG_PUTS_P(PSTR("MMU can_load failed."));
     return false;
   }
 }
