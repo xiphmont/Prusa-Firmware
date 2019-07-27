@@ -371,7 +371,7 @@ void mmu_loop(void)
                             const uint8_t filament = mmu_cmd - MmuCmd::K0;
                             clear_sensor_watchdog();
                             DEBUG_PRINTF_P(PSTR("MMU <= 'K%d'\n"), filament);
-                            mmu_printf_P(PSTR("K%d\n"), filament); //send eject filament
+                            mmu_printf_P(PSTR("K%d\n"), filament); //send cut filament
                             mmu_fil_loaded = false;
                             mmu_state = S::WaitCmd;
                         }
@@ -1224,6 +1224,7 @@ static const E_step ramming_sequence[] PROGMEM =
 //! @brief Unload sequence to optimize shape of the tip of the unloaded filament
 void mmu_filament_ramming()
 {
+    clear_sensor_watchdog();
     for(uint8_t i = 0; i < (sizeof(ramming_sequence)/sizeof(E_step));++i)
     {
         current_position[E_AXIS] += pgm_read_float(&(ramming_sequence[i].extrude));
@@ -1256,7 +1257,7 @@ void extr_unload()
 #ifndef SNMM
 		st_synchronize();
 
-        menu_submenu(extr_unload_view);
+                menu_submenu(extr_unload_view);
 
 		mmu_filament_ramming();
 
