@@ -568,6 +568,7 @@ void lcdui_print_planner_diag(void)
 // Print feedrate (8 chars total)
 void lcdui_print_feedrate(void)
 {
+        lcd_set_cursor(12, 1);
 	int chars = lcd_printf_P(_N("%c%3d%%"), LCD_STR_FEEDRATE[0], feedmultiply);
 	lcd_space(8 - chars);
 }
@@ -837,7 +838,7 @@ void lcdui_print_status_screen(void)
     //Print Z-coordinate (8 chars total)
 	lcdui_print_Z_coord();
 
-    lcd_set_cursor(0, 1); //line 1
+        lcd_set_cursor(0, 1); //line 1
 
 	//Print the Bed temperature (9 chars total)
 	lcdui_print_temp(LCD_STR_BEDTEMP[0], (int)(degBed() + 0.5), (int)(degTargetBed() + 0.5));
@@ -848,8 +849,8 @@ void lcdui_print_status_screen(void)
 	//Print planner diagnostics (8 chars)
 	lcdui_print_planner_diag();
 #else // PLANNER_DIAGNOSTICS
-    //Print Feedrate (8 chars)
-	lcdui_print_feedrate();
+        //Print Feedrate (8 chars)
+        // do it in 'user-triggered' section instead
 #endif // PLANNER_DIAGNOSTICS
 
 	lcd_set_cursor(0, 2); //line 2
@@ -875,7 +876,7 @@ void lcdui_print_status_screen(void)
 #endif //CMD_DIAGNOSTICS
 
     lcd_set_cursor(0, 3); //line 3
-
+    if(!scrollstuff) lcdui_print_status_line(); // scrolling case was printed earlier
 }
 
 // Main status screen. It's up to the implementation specific part to show what is needed. As this is very display dependent
@@ -926,7 +927,24 @@ static void lcd_status_screen()
 	else if (feedmultiply > 999)
 		feedmultiply = 999;
 
-	if (lcd_status_update_delay) {
+        // user-triggerable fastpath for things that may need to
+        // refresh faster than half a second to give good feedback to
+        // user interaction
+#ifndef PLANNER_DIAGNOSTICS
+  	  lcdui_print_feedrate();
+#endif // PLANNER_DIAGNOSTICS
+
+        // when we're srolling the status line, let the scroller handle timing
+        if(scrollstuff) {
+#ifndef DEBUG_DISABLE_LCD_STATUS_LINE
+	   lcdui_print_status_line();
+#endif //DEBUG_DISABLE_LCD_STATUS_LINE
+        }
+
+        // for the rest of the status screen, don't update too often
+        // even if user is interacting; LCD interaction steals cycles
+        // from actual printing.
+        if (lcd_status_update_delay) {
 		lcd_status_update_delay--;
                 lcd_draw_update= 0;
         } else
@@ -947,17 +965,7 @@ static void lcd_status_screen()
 		}
 
 		lcdui_print_status_screen();
-        }
 
-        if(scrollstuff || lcd_draw_update) {
-                // when we're srolling the status line, let the scroller handle timing
-#ifndef DEBUG_DISABLE_LCD_STATUS_LINE
-	        lcdui_print_status_line(); 
-#endif //DEBUG_DISABLE_LCD_STATUS_LINE
-        }
-
-	if (lcd_draw_update)
-	{
 		if (farm_mode)
 		{
 			farm_timer--;
@@ -980,7 +988,7 @@ static void lcd_status_screen()
 			}
 		} // end of farm_mode
 
-		lcd_status_update_delay = 10;   /* redraw the main screen every second. This is easier then trying keep track of all things that change on the screen */
+		lcd_status_update_delay = 10;   /* redraw the main screen every second. */
 		if (lcd_commands_type != LcdCommands::Idle)
 			lcd_commands();
 	} // end of lcd_draw_update
