@@ -225,12 +225,17 @@ void lcd_refresh(void)
 {
     lcd_begin(1);
     lcd_set_custom_characters();
+    if (lcd_charsetup_func)
+      lcd_charsetup_func();
+    lcd_status_update_delay = 0;
 }
 
 void lcd_refresh_noclear(void)
 {
     lcd_begin(0);
     lcd_set_custom_characters();
+    if (lcd_charsetup_func)
+      lcd_charsetup_func();
 }
 
 void lcd_clear(void)
@@ -334,7 +339,7 @@ void lcd_set_cursor(uint8_t col, uint8_t row)
 	int row_offsets[] = { 0x00, 0x40, 0x14, 0x54 };
 	if (row >= LCD_HEIGHT)
 		row = LCD_HEIGHT - 1;    // we count rows starting w/0
-	lcd_currline = row;  
+	lcd_currline = row;
 	lcd_command(LCD_SETDDRAMADDR | (col + row_offsets[row]));
 }
 

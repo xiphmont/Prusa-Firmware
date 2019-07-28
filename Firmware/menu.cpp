@@ -48,7 +48,8 @@ void menu_goto(menu_func_t menu, const uint32_t encoder, const bool feedback, bo
 	{
 		menu_menu = menu;
 		lcd_encoder = encoder;
-		asm("sei");
+                lcd_refresh();
+                asm("sei");
 		if (reset_menu_state)
 		{
 			// Resets the global shared C union.

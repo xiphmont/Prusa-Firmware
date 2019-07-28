@@ -647,6 +647,18 @@ int mmu_get_selector_offset()
   return cached_selector_offset;
 }
 
+int mmu_set_idler_offset(uint8_t offset)
+{
+  cached_idler_offset = mmu_blocking_X_command(3,offset);
+  return cached_idler_offset;
+}
+
+int mmu_set_selector_offset(uint8_t offset)
+{
+  cached_selector_offset = mmu_blocking_X_command(4,offset);
+  return cached_selector_offset;
+}
+
 int8_t mmu_set_filament_type(uint8_t extruder, uint8_t filament)
 {
 	printf_P(PSTR("MMU <= 'F%d %d'\n"), extruder, filament);

@@ -897,6 +897,12 @@ static void lcd_status_screen()
 		}
 	}
 
+        // don't bother drawing when we're just going to be cleared immediately
+        if (lcd_draw_update == 2){
+          lcd_status_update_delay=0;
+          return;
+        }
+
 #ifdef ULTIPANEL_FEEDMULTIPLY
 	// Dead zone at 100% feedrate
 	if ((feedmultiply < 100 && (feedmultiply + int(lcd_encoder)) > 100) ||
@@ -1584,10 +1590,10 @@ void lcd_commands()
 
 void lcd_return_to_status()
 {
-  lcd_status_update_delay=0;
   lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
   menu_goto(lcd_status_screen, 0, false, true);
   menu_depth = 0;
+  lcd_status_update_delay = 0;
   eFilamentAction=FilamentAction::None; // i.e. non-autoLoad
 }
 
@@ -2268,6 +2274,7 @@ static void mFilamentPrompt()
 {
 uint8_t nLevel;
 
+lcd_set_custom_characters_degree();
 lcd_set_cursor(0,0);
 lcdui_print_temp(LCD_STR_THERMOMETER[0],(int)degHotend(0),(int)degTargetHotend(0));
 lcd_set_cursor(0,2);
@@ -2329,7 +2336,7 @@ void mFilamentItem(uint16_t nTemp, uint16_t nTempBed)
     static int nTargetOld;
     static int nTargetBedOld;
     uint8_t nLevel;
-
+    lcd_set_custom_characters_degree();
     nTargetOld = target_temperature[0];
     nTargetBedOld = target_temperature_bed;
     setTargetHotend0((float )nTemp);
@@ -4636,26 +4643,72 @@ void lcd_reset_mmu()
         lcd_quick_feedback();
 }
 
+/**
+ * @brief Adjust selector offset from left-had position, requires talking to MMU
+ *
+ */
+static void lcd_selector_offset_menu()
+{
+  int sel_offset = mmu_get_selector_offset();
+  if (lcd_encoder != 0) {
+    sel_offset += (int)lcd_encoder*2;
+    if(sel_offset<0) sel_offset=0;
+    if(sel_offset>255) sel_offset=255;
+    sel_offset = mmu_set_selector_offset(sel_offset);
+    lcd_encoder = 0;
+    lcd_draw_update = 1;
+  }
+  if (lcd_draw_update) {
+    lcd_set_cursor(0, 0);
+    lcd_printf_P(PSTR("Adjusting selector"));
+    lcd_set_cursor(0, 1);
+    lcd_printf_P(PSTR("offset: %d  "), sel_offset);
+  }
+  if (LCD_CLICKED) menu_back();
+}
+
 void lcd_mmux_calibration_menu()
 {
-  int idl_offset = mmu_get_idler_offset();
-  int sel_offset = mmu_get_selector_offset();
+  typedef struct
+  {
+    int8_t status;
+  } _menu_data_t;
+  static_assert(sizeof(menu_data)>= sizeof(_menu_data_t),"_menu_data_t doesn't fit into menu_data");
+  _menu_data_t* _md = (_menu_data_t*)&(menu_data[0]);
+  if (_md->status == 0)
+    {
+      lcd_timeoutToStatus.start();
+      // Entering menu first time, set up
 
-	MENU_BEGIN();
-		MENU_ITEM_BACK_P(_T(MSG_MENU_CALIBRATION));
-		MENU_ITEM_SUBMENU_P(_i("Calibrate MMU"), lcd_calibrate_mmu);
-		MENU_ITEM_SUBMENU_P(_i("Home MMU"), lcd_home_mmu);
-                MENU_ITEM_EDIT_int3_P(_i("Selector offset"),  &sel_offset, 0, 255);
-                MENU_ITEM_EDIT_int3_P(_i("Idler offset"),  &idl_offset, 0, 255);
-		MENU_ITEM_SUBMENU_P(_i("Reset MMU"), lcd_reset_mmu);
-	MENU_END();
+      // if there's filament in the FINDA, don't continue. Report it and then return
+      if(mmu_finda){
+        lcd_show_fullscreen_message_and_wait_P(PSTR("Filament present in selector; unload before calibrating MMU."));
+        lcd_clear();
+        menu_back();
+        return;
+      }
+      _md->status = 1;
 
-        if(idl_offset != mmu_get_idler_offset()){
-          // idler offset changed, update MMU realtime
-        }
-        if(sel_offset != mmu_get_selector_offset()){
-          // selector offset changed, update MMU realtime
-        }
+      // no-op if idler is homed, otherwise this forces it to happen
+      // now as opposed to entering the edit submenu
+      int offset = mmu_get_idler_offset();
+      mmu_set_idler_offset(offset);
+
+      // no-op if selector is homed and at a filament position,
+      // otherwise this forces it to happen now as opposed to entering
+      // the edit submenu
+      offset = mmu_get_selector_offset();
+      mmu_set_selector_offset(offset);
+    }
+
+  MENU_BEGIN();
+  MENU_ITEM_BACK_P(_T(MSG_MENU_CALIBRATION));
+  MENU_ITEM_SUBMENU_P(_i("Autocalibrate MMU"), lcd_calibrate_mmu);
+  MENU_ITEM_SUBMENU_P(_i("Home MMU"), lcd_home_mmu);
+  MENU_ITEM_SUBMENU_P(_i("Selector offset"),  lcd_selector_offset_menu);
+  //MENU_ITEM_EDIT_int3_P(_i("Idler offset"),  &idl_offset, 0, 255);
+  MENU_ITEM_SUBMENU_P(_i("Reset MMU"), lcd_reset_mmu);
+  MENU_END();
 }
 
 void lcd_temp_calibration_set() {
@@ -4920,6 +4973,7 @@ static void wait_preheat()
     delay_keep_alive(2000);
     lcd_display_message_fullscreen_P(_T(MSG_WIZARD_HEATING));
 	lcd_set_custom_characters();
+        lcd_set_custom_characters_degree();
 	while (abs(degHotend(0) - degTargetHotend(0)) > 3) {
         lcd_display_message_fullscreen_P(_T(MSG_WIZARD_HEATING));
 
@@ -5824,9 +5878,6 @@ static void lcd_calibration_menu()
     }
 	MENU_ITEM_GCODE_P(_T(MSG_AUTO_HOME), PSTR("G28 W"));
 	MENU_ITEM_FUNCTION_P(_i("Selftest         "), lcd_selftest_v);////MSG_SELFTEST
-        if(mmux_features){
-          MENU_ITEM_SUBMENU_P(_i("Calibrate MMU"), lcd_mmux_calibration_menu);
-        }
 #ifdef MK1BP
     // MK1
     // "Calibrate Z"
@@ -5858,6 +5909,9 @@ static void lcd_calibration_menu()
 #ifndef MK1BP
 	MENU_ITEM_SUBMENU_P(_i("Temp. calibration"), lcd_pinda_calibration_menu);////MSG_CALIBRATION_PINDA_MENU c=17 r=1
 #endif //MK1BP
+        if(mmux_features){
+          MENU_ITEM_SUBMENU_P(_i("MMU"), lcd_mmux_calibration_menu);
+        }
   }
   
   MENU_END();
@@ -8530,6 +8584,7 @@ void ultralcd_init()
 	lcd_longpress_func = menu_lcd_longpress_func;
 	lcd_charsetup_func = menu_lcd_charsetup_func;
 	lcd_lcdupdate_func = menu_lcd_lcdupdate_func;
+        lcd_draw_update = 1;
 	menu_menu = lcd_status_screen;
 	menu_lcd_charsetup_func();
 
@@ -8547,7 +8602,6 @@ void ultralcd_init()
   WRITE(SDCARDDETECT, HIGH);
   lcd_oldcardstatus = IS_SD_INSERTED;
 #endif//(SDCARDDETECT > 0)
-  lcd_encoder_steps = 0;
 }
 
 
@@ -8804,7 +8858,6 @@ void menu_lcd_lcdupdate_func(void)
               (*menu_menu)();
               menu_leaving = 0;
             }
-          lcd_clear();
           lcd_return_to_status();
           lcd_draw_update = 2;
         }
