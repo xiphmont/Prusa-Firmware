@@ -830,10 +830,10 @@ const uint8_t lcd_chardata_thermometer[8] PROGMEM = {
 	B01010,
 	B01010,
 	B01010,
-	B01010,
 	B10001,
 	B10001,
-	B01110};
+	B01110,
+	B00000};
 
 const uint8_t lcd_chardata_uplevel[8] PROGMEM = {
 	B00100,
@@ -930,10 +930,10 @@ const uint8_t lcd_chardata_arrdown[8] PROGMEM = {
 	B00000,
 	B00000,
 	B00000,
-	B00000,
 	B10001,
 	B01010,
-	B00100};
+	B00100,
+	B00000};
 
 
 
@@ -973,13 +973,13 @@ void lcd_set_custom_characters_progress(void)
 
 const uint8_t lcd_chardata_arr2down[8] PROGMEM = {
 	B00000,
-	B00000,
 	B10001,
 	B01010,
 	B00100,
 	B10001,
 	B01010,
-	B00100};
+	B00100,
+	B00000};
 
 const uint8_t lcd_chardata_confirm[8] PROGMEM = {
 	B00000,
